@@ -1,6 +1,7 @@
 .nvm/
 
 
+<<<<<<< HEAD
 
 
 .local/
@@ -20,4 +21,10 @@
 
 
 .npm/
+
+=======
+>>>>>>> 1c87cd60 (Initial commit of OASIS v3 project files)
+
+
+.logs/
 

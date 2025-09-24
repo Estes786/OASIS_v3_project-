@@ -263,6 +263,7 @@ ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || 
 pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
 source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="hf_YOUR_TOKEN_HERE"
 source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
+<<<<<<< HEAD
 export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
 export TERM=xterm-256color
 export OPENAI_API_KEY="sk-JLkNpaGdqVtbKUwnpgWXPb"
@@ -312,3 +313,5 @@ source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="hf_dtMRpDsN
 source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
 source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="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"
 source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
+=======
+>>>>>>> 1c87cd60 (Initial commit of OASIS v3 project files)
