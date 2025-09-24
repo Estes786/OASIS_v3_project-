@@ -1,0 +1,472 @@
+"import gradio as gr
+import requests
+import os
+import json
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+import time
+
+class OASISAIFactory:
+    """
+    OASIS AI Factory - Hugging Face Spaces Multi-Model Platform
+    Multiple AI/ML/DL capabilities with API endpoints for orchestration
+    """
+
+    def __init__(self):
+        self.hf_token = os.getenv("HF_TOKEN", "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")
+        self.api_base = "https://api-inference.huggingface.co/models"
+        self.session_stats = {
+            "requests": 0,
+            "successful": 0,
+            "failed": 0,
+            "start_time": datetime.now().isoformat()
+        }
+
+        # Available AI models and capabilities
+        self.models = {
+            "sentiment": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "emotion": "cardiffnlp/twitter-roberta-base-emotion",
+            "summarization": "facebook/bart-large-cnn",
+            "translation_en_es": "Helsinki-NLP/opus-mt-en-es",
+            "translation_es_en": "Helsinki-NLP/opus-mt-es-en",
+            "text_generation": "gpt2",
+            "question_answering": "deepset/roberta-base-squad2",
+            "text_classification": "distilbert-base-uncased-finetuned-sst-2-english",
+            "image_classification": "google/vit-base-patch16-224",
+            "speech_recognition": "openai/whisper-tiny"
+        }
+
+        self.headers = {
+            "Authorization": f"Bearer {self.hf_token}",
+            "Content-Type": "application/json"
+        }
+
+    def query_model(self, model_name: str, payload: Dict) -> Dict[str, Any]:
+        """Query any Hugging Face model with error handling"""
+        url = f"{self.api_base}/{model_name}"
+
+        try:
+            start_time = time.time()
+            response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+            response_time = time.time() - start_time
+
+            self.session_stats["requests"] += 1
+
+            if response.status_code == 200:
+                self.session_stats["successful"] += 1
+                return {
+                    "success": True,
+                    "data": response.json(),
+                    "response_time": response_time,
+                    "model": model_name
+                }
+            else:
+                self.session_stats["failed"] += 1
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "model": model_name
+                }
+
+        except Exception as e:
+            self.session_stats["failed"] += 1
+            return {
+                "success": False,
+                "error": str(e),
+                "model": model_name
+            }
+
+    def analyze_sentiment(self, text: str) -> str:
+        """Analyze sentiment with detailed results"""
+        if not text.strip():
+            return "âŒ Error: Please enter text to analyze"
+
+        payload = {"inputs": text}
+        result = self.query_model(self.models["sentiment"], payload)
+
+        if result["success"]:
+            predictions = result["data"]
+            if predictions and isinstance(predictions, list) and len(predictions) > 0:
+                sentiment_data = predictions[0]
+
+                # Format sentiment results
+                results = []
+                for item in sentiment_data:
+                    label = item["label"]
+                    score = item["score"]
+                    confidence = f"{score:.2%}"
+
+                    # Convert labels to readable format
+                    if label == "LABEL_0":
+                        label = "ðŸ˜¢ Negative"
+                    elif label == "LABEL_1":
+                        label = "ðŸ˜ Neutral"
+                    elif label == "LABEL_2":
+                        label = "ðŸ˜Š Positive"
+
+                    results.append(f"{label}: {confidence}")
+
+                return f"âœ… Sentiment Analysis:\n" + "\n".join(results) + f"\n\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Unexpected response format"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def classify_emotion(self, text: str) -> str:
+        """Classify emotions in text"""
+        if not text.strip():
+            return "âŒ Error: Please enter text to analyze"
+
+        payload = {"inputs": text}
+        result = self.query_model(self.models["emotion"], payload)
+
+        if result["success"]:
+            emotions = result["data"]
+            if emotions and isinstance(emotions, list) and len(emotions) > 0:
+                emotion_data = emotions[0]
+
+                # Sort by confidence and take top 3
+                sorted_emotions = sorted(emotion_data, key=lambda x: x["score"], reverse=True)[:3]
+
+                results = []
+                emotion_icons = {
+                    "joy": "ðŸ˜Š",
+                    "sadness": "ðŸ˜¢", 
+                    "anger": "ðŸ˜ ",
+                    "fear": "ðŸ˜¨",
+                    "surprise": "ðŸ˜²",
+                    "disgust": "ðŸ¤¢",
+                    "love": "â¤ï¸"
+                }
+
+                for emotion in sorted_emotions:
+                    label = emotion["label"]
+                    score = emotion["score"]
+                    icon = emotion_icons.get(label, "ðŸŽ­")
+                    results.append(f"{icon} {label.title()}: {score:.2%}")
+
+                return f"âœ… Emotion Analysis:\n" + "\n".join(results) + f"\n\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Unexpected response format"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def summarize_text(self, text: str, max_length: int = 100) -> str:
+        """Summarize text with configurable length"""
+        if not text.strip():
+            return "âŒ Error: Please enter text to summarize"
+
+        if len(text.split()) < 10:
+            return "âŒ Error: Text too short for summarization (minimum 10 words)"
+
+        payload = {
+            "inputs": text,
+            "parameters": {
+                "max_length": max_length,
+                "min_length": 10,
+                "do_sample": False
+            }
+        }
+
+        result = self.query_model(self.models["summarization"], payload)
+
+        if result["success"]:
+            summary_data = result["data"]
+            if summary_data and isinstance(summary_data, list) and len(summary_data) > 0:
+                summary_text = summary_data[0]["summary_text"]
+                return f"âœ… Summary:\n{summary_text}\n\nðŸ“Š Original: {len(text.split())} words â†’ Summary: {len(summary_text.split())} words\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Could not generate summary"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def translate_text(self, text: str, direction: str = "en_to_es") -> str:
+        """Translate text between English and Spanish"""
+        if not text.strip():
+            return "âŒ Error: Please enter text to translate"
+
+        model_key = "translation_en_es" if direction == "en_to_es" else "translation_es_en"
+        model_name = self.models[model_key]
+
+        payload = {"inputs": text}
+        result = self.query_model(model_name, payload)
+
+        if result["success"]:
+            translation_data = result["data"]
+            if translation_data and isinstance(translation_data, list) and len(translation_data) > 0:
+                translated_text = translation_data[0]["translation_text"]
+                lang_info = "ðŸ‡ºðŸ‡¸ â†’ ðŸ‡ªðŸ‡¸" if direction == "en_to_es" else "ðŸ‡ªðŸ‡¸ â†’ ðŸ‡ºðŸ‡¸"
+                return f"âœ… Translation {lang_info}:\n{translated_text}\n\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Could not translate text"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def generate_text(self, prompt: str, max_length: int = 100) -> str:
+        """Generate text continuation"""
+        if not prompt.strip():
+            return "âŒ Error: Please enter a prompt"
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_length": max_length,
+                "temperature": 0.7,
+                "do_sample": True
+            }
+        }
+
+        result = self.query_model(self.models["text_generation"], payload)
+
+        if result["success"]:
+            generated_data = result["data"]
+            if generated_data and isinstance(generated_data, list) and len(generated_data) > 0:
+                generated_text = generated_data[0]["generated_text"]
+                return f"âœ… Generated Text:\n{generated_text}\n\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Could not generate text"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def answer_question(self, context: str, question: str) -> str:
+        """Answer questions based on context"""
+        if not context.strip() or not question.strip():
+            return "âŒ Error: Please provide both context and question"
+
+        payload = {
+            "inputs": {
+                "question": question,
+                "context": context
+            }
+        }
+
+        result = self.query_model(self.models["question_answering"], payload)
+
+        if result["success"]:
+            answer_data = result["data"]
+            if "answer" in answer_data:
+                answer = answer_data["answer"]
+                confidence = answer_data.get("score", 0)
+                return f"âœ… Answer: {answer}\nðŸ“Š Confidence: {confidence:.2%}\nâ±ï¸ Response time: {result['response_time']:.2f}s"
+            else:
+                return "âŒ Error: Could not find answer"
+        else:
+            return f"âŒ Error: {result['error']}"
+
+    def get_stats(self) -> str:
+        """Get session statistics"""
+        total = self.session_stats["requests"]
+        success = self.session_stats["successful"]
+        failed = self.session_stats["failed"]
+        success_rate = (success / total * 100) if total > 0 else 0
+
+        return f"""ðŸ“Š OASIS AI Factory Statistics:
+
+ðŸ”¢ Total Requests: {total}
+âœ… Successful: {success}
+âŒ Failed: {failed}
+ðŸ“ˆ Success Rate: {success_rate:.1f}%
+â° Session Start: {self.session_stats['start_time']}
+ðŸ¤– Available Models: {len(self.models)}
+
+ðŸš€ Ready to process your AI requests!"""
+
+# Initialize the AI Factory
+ai_factory = OASISAIFactory()
+
+# Create Gradio Interface
+with gr.Blocks(
+    title="ðŸš€ OASIS AI Factory - Multi-Model AI Platform",
+    theme=gr.themes.Soft(),
+    css="""
+    .gradio-container {
+        max-width: 1200px !important;
+    }
+    .header-text {
+        text-align: center;
+        font-size: 2.5em;
+        font-weight: bold;
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 1em;
+    }
+    """
+) as demo:
+
+    # Header
+    gr.HTML("""
+    <div class="header-text">
+        ðŸš€ OASIS AI Factory v3.0
+    </div>
+    <div style="text-align: center; font-size: 1.2em; color: #666; margin-bottom: 2em;">
+        Ultra-Lightweight Multi-Model AI Platform<br>
+        <span style="font-size: 0.9em;">Termux Command Center + Hugging Face Processing Power</span>
+    </div>
+    """)
+
+    with gr.Tabs():
+        # Sentiment Analysis Tab
+        with gr.Tab("ðŸ˜Š Sentiment Analysis"):
+            with gr.Row():
+                with gr.Column():
+                    sentiment_input = gr.Textbox(
+                        label="Enter text for sentiment analysis",
+                        placeholder="Type your text here...",
+                        lines=3
+                    )
+                    sentiment_btn = gr.Button("ðŸ¤– Analyze Sentiment", variant="primary")
+
+                with gr.Column():
+                    sentiment_output = gr.Textbox(
+                        label="Sentiment Results",
+                        lines=6,
+                        interactive=False
+                    )
+
+        # Emotion Classification Tab  
+        with gr.Tab("ðŸŽ­ Emotion Detection"):
+            with gr.Row():
+                with gr.Column():
+                    emotion_input = gr.Textbox(
+                        label="Enter text for emotion analysis",
+                        placeholder="Type your text here...",
+                        lines=3
+                    )
+                    emotion_btn = gr.Button("ðŸŽ­ Detect Emotions", variant="primary")
+
+                with gr.Column():
+                    emotion_output = gr.Textbox(
+                        label="Emotion Results",
+                        lines=6,
+                        interactive=False
+                    )
+
+        # Text Summarization Tab
+        with gr.Tab("ðŸ“„ Text Summarization"):
+            with gr.Row():
+                with gr.Column():
+                    summary_input = gr.Textbox(
+                        label="Enter text to summarize",
+                        placeholder="Enter a long text that you want to summarize...",
+                        lines=5
+                    )
+                    summary_length = gr.Slider(
+                        minimum=30,
+                        maximum=200,
+                        value=100,
+                        step=10,
+                        label="Summary Length (words)"
+                    )
+                    summary_btn = gr.Button("ðŸ“„ Summarize Text", variant="primary")
+
+                with gr.Column():
+                    summary_output = gr.Textbox(
+                        label="Summary Results",
+                        lines=8,
+                        interactive=False
+                    )
+
+        # Translation Tab
+        with gr.Tab("ðŸŒ Translation"):
+            with gr.Row():
+                with gr.Column():
+                    translate_input = gr.Textbox(
+                        label="Enter text to translate",
+                        placeholder="Type text in English or Spanish...",
+                        lines=3
+                    )
+                    translate_direction = gr.Radio(
+                        choices=["en_to_es", "es_to_en"],
+                        value="en_to_es",
+                        label="Translation Direction"
+                    )
+                    translate_btn = gr.Button("ðŸŒ Translate", variant="primary")
+
+                with gr.Column():
+                    translate_output = gr.Textbox(
+                        label="Translation Results",
+                        lines=6,
+                        interactive=False
+                    )
+
+        # Text Generation Tab
+        with gr.Tab("âœï¸ Text Generation"):
+            with gr.Row():
+                with gr.Column():
+                    generate_input = gr.Textbox(
+                        label="Enter a prompt for text generation",
+                        placeholder="Start your story or idea...",
+                        lines=3
+                    )
+                    generate_length = gr.Slider(
+                        minimum=50,
+                        maximum=200,
+                        value=100,
+                        step=10,
+                        label="Generation Length"
+                    )
+                    generate_btn = gr.Button("âœï¸ Generate Text", variant="primary")
+
+                with gr.Column():
+                    generate_output = gr.Textbox(
+                        label="Generated Text",
+                        lines=8,
+                        interactive=False
+                    )
+
+        # Question Answering Tab
+        with gr.Tab("â“ Question Answering"):
+            with gr.Row():
+                with gr.Column():
+                    qa_context = gr.Textbox(
+                        label="Context (provide background information)",
+                        placeholder="Enter the context or document...",
+                        lines=4
+                    )
+                    qa_question = gr.Textbox(
+                        label="Question",
+                        placeholder="Ask a question about the context...",
+                        lines=2
+                    )
+                    qa_btn = gr.Button("â“ Answer Question", variant="primary")
+
+                with gr.Column():
+                    qa_output = gr.Textbox(
+                        label="Answer",
+                        lines=6,
+                        interactive=False
+                    )
+
+        # Statistics Tab
+        with gr.Tab("ðŸ“Š Statistics"):
+            with gr.Row():
+                with gr.Column():
+                    stats_btn = gr.Button("ðŸ“Š Refresh Statistics", variant="primary")
+
+                with gr.Column():
+                    stats_output = gr.Textbox(
+                        label="AI Factory Statistics",
+                        lines=12,
+                        interactive=False,
+                        value=ai_factory.get_stats()
+                    )
+
+    # Event handlers
+    sentiment_btn.click(ai_factory.analyze_sentiment, inputs=sentiment_input, outputs=sentiment_output)
+    emotion_btn.click(ai_factory.classify_emotion, inputs=emotion_input, outputs=emotion_output)
+    summary_btn.click(ai_factory.summarize_text, inputs=[summary_input, summary_length], outputs=summary_output)
+    translate_btn.click(ai_factory.translate_text, inputs=[translate_input, translate_direction], outputs=translate_output)
+    generate_btn.click(ai_factory.generate_text, inputs=[generate_input, generate_length], outputs=generate_output)
+    qa_btn.click(ai_factory.answer_question, inputs=[qa_context, qa_question], outputs=qa_output)
+    stats_btn.click(ai_factory.get_stats, outputs=stats_output)
+
+# Launch configuration
+if __name__ == "__main__":
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        show_api=True,
+        show_error=True
+    )"

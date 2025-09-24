@@ -1,0 +1,462 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 Monitoring System - Ultra-Lightweight Analytics
+Zero Heavy Dependencies • Real-Time Metrics • Business Intelligence
+
+Comprehensive monitoring for OASIS system performance, business metrics,
+and revenue tracking. Built with zero heavy dependencies.
+"""
+
+import os
+import sys
+import json
+import time
+import threading
+from datetime import datetime, timedelta
+from collections import defaultdict, deque
+
+# Import OASIS components
+try:
+    from business_automation import BusinessAutomation
+    from oasis_core import OASISLogger
+except ImportError:
+    print("❌ Error: OASIS components not found!")
+    print("Please ensure oasis_core.py and business_automation.py are available")
+    sys.exit(1)
+
+class SystemMetrics:
+    """Ultra-lightweight system monitoring"""
+
+    def __init__(self, max_history=100):
+        self.max_history = max_history
+        self.metrics_history = {
+            'cpu': deque(maxlen=max_history),
+            'memory': deque(maxlen=max_history),
+            'api_calls': deque(maxlen=max_history),
+            'response_times': deque(maxlen=max_history),
+            'errors': deque(maxlen=max_history)
+        }
+
+        self.logger = OASISLogger()
+        self.start_time = datetime.now()
+
+        # Current metrics
+        self.current_metrics = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'failed_requests': 0,
+            'average_response_time': 0,
+            'error_rate': 0
+        }
+
+        self.logger.info("System metrics monitoring initialized")
+
+    def record_api_call(self, response_time, success=True):
+        """Record API call metrics"""
+        timestamp = datetime.now()
+
+        # Record metrics
+        self.metrics_history['api_calls'].append({
+            'timestamp': timestamp,
+            'response_time': response_time,
+            'success': success
+        })
+
+        self.metrics_history['response_times'].append(response_time)
+
+        if not success:
+            self.metrics_history['errors'].append(timestamp)
+
+        # Update current metrics
+        self.current_metrics['total_requests'] += 1
+        if success:
+            self.current_metrics['successful_requests'] += 1
+        else:
+            self.current_metrics['failed_requests'] += 1
+
+        # Calculate averages
+        response_times = list(self.metrics_history['response_times'])
+        if response_times:
+            self.current_metrics['average_response_time'] = sum(response_times) / len(response_times)
+
+        # Calculate error rate
+        total = self.current_metrics['total_requests']
+        failed = self.current_metrics['failed_requests']
+        self.current_metrics['error_rate'] = (failed / max(total, 1)) * 100
+
+        self.logger.info(f"API call recorded: {response_time:.3f}s, success: {success}")
+
+    def get_system_health(self):
+        """Get current system health status"""
+        uptime = datetime.now() - self.start_time
+
+        # Calculate health score based on various factors
+        health_score = 100
+
+        # Reduce health for high error rate
+        if self.current_metrics['error_rate'] > 5:
+            health_score -= 20
+        elif self.current_metrics['error_rate'] > 1:
+            health_score -= 10
+
+        # Reduce health for slow response times
+        avg_response = self.current_metrics['average_response_time']
+        if avg_response > 10:
+            health_score -= 20
+        elif avg_response > 5:
+            health_score -= 10
+
+        # Determine health status
+        if health_score >= 90:
+            status = 'excellent'
+        elif health_score >= 70:
+            status = 'good'
+        elif health_score >= 50:
+            status = 'warning'
+        else:
+            status = 'critical'
+
+        return {
+            'status': status,
+            'health_score': health_score,
+            'uptime_seconds': uptime.total_seconds(),
+            'uptime_formatted': str(uptime),
+            'total_requests': self.current_metrics['total_requests'],
+            'success_rate': ((self.current_metrics['successful_requests'] / 
+                             max(self.current_metrics['total_requests'], 1)) * 100),
+            'error_rate': self.current_metrics['error_rate'],
+            'average_response_time': self.current_metrics['average_response_time']
+        }
+
+    def get_performance_summary(self, hours=24):
+        """Get performance summary for specified period"""
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+
+        # Filter recent API calls
+        recent_calls = [
+            call for call in self.metrics_history['api_calls']
+            if call['timestamp'] >= cutoff_time
+        ]
+
+        if not recent_calls:
+            return {
+                'period_hours': hours,
+                'total_calls': 0,
+                'success_rate': 0,
+                'average_response_time': 0,
+                'peak_response_time': 0
+            }
+
+        successful_calls = [call for call in recent_calls if call['success']]
+        response_times = [call['response_time'] for call in recent_calls]
+
+        return {
+            'period_hours': hours,
+            'total_calls': len(recent_calls),
+            'successful_calls': len(successful_calls),
+            'success_rate': (len(successful_calls) / len(recent_calls)) * 100,
+            'average_response_time': sum(response_times) / len(response_times),
+            'peak_response_time': max(response_times),
+            'min_response_time': min(response_times)
+        }
+
+class BusinessIntelligence:
+    """Business intelligence and analytics"""
+
+    def __init__(self, business_automation):
+        self.business = business_automation
+        self.logger = OASISLogger()
+
+        # Analytics data
+        self.analytics_data = {
+            'hourly_revenue': defaultdict(float),
+            'daily_revenue': defaultdict(float),
+            'service_popularity': defaultdict(int),
+            'client_activity': defaultdict(list)
+        }
+
+        self.logger.info("Business intelligence system initialized")
+
+    def analyze_revenue_trends(self, days=30):
+        """Analyze revenue trends"""
+        summary = self.business.metrics.get_revenue_summary(days)
+
+        # Calculate daily averages
+        daily_average = summary['total_revenue'] / max(days, 1)
+
+        # Revenue growth analysis
+        if days >= 14:
+            first_half = self.business.metrics.get_revenue_summary(days // 2)
+            second_half_days = days - (days // 2)
+
+            # Calculate growth rate
+            second_half_daily = first_half['total_revenue'] / max(days // 2, 1)
+            first_half_daily = (summary['total_revenue'] - first_half['total_revenue']) / max(second_half_days, 1)
+
+            if second_half_daily > 0:
+                growth_rate = ((first_half_daily - second_half_daily) / second_half_daily) * 100
+            else:
+                growth_rate = 0
+        else:
+            growth_rate = 0
+
+        return {
+            'period_days': days,
+            'total_revenue': summary['total_revenue'],
+            'daily_average': daily_average,
+            'growth_rate': growth_rate,
+            'transactions_count': summary['transactions_count'],
+            'average_transaction_value': summary['average_transaction'],
+            'service_breakdown': summary['service_breakdown'],
+            'target_progress': {
+                '1k': min(100, (summary['total_revenue'] / 1000) * 100),
+                '5k': min(100, (summary['total_revenue'] / 5000) * 100),
+                '10k': min(100, (summary['total_revenue'] / 10000) * 100)
+            }
+        }
+
+    def get_client_insights(self):
+        """Get client behavior insights"""
+        clients = self.business.metrics.clients_data
+
+        # Client statistics
+        total_clients = len(clients)
+        active_clients = len([c for c in clients.values() if c['status'] == 'active'])
+
+        # Calculate client value distribution
+        client_values = [client.get('total_spent', 0) for client in clients.values()]
+
+        if client_values:
+            avg_client_value = sum(client_values) / len(client_values)
+            max_client_value = max(client_values)
+            min_client_value = min(client_values)
+        else:
+            avg_client_value = max_client_value = min_client_value = 0
+
+        # Service plan distribution
+        plan_distribution = defaultdict(int)
+        for client in clients.values():
+            plan_distribution[client.get('service_plan', 'unknown')] += 1
+
+        return {
+            'total_clients': total_clients,
+            'active_clients': active_clients,
+            'client_retention_rate': (active_clients / max(total_clients, 1)) * 100,
+            'average_client_value': avg_client_value,
+            'highest_value_client': max_client_value,
+            'lowest_value_client': min_client_value,
+            'service_plan_distribution': dict(plan_distribution)
+        }
+
+    def generate_business_recommendations(self):
+        """Generate AI-powered business recommendations"""
+        revenue_trends = self.analyze_revenue_trends(30)
+        client_insights = self.get_client_insights()
+
+        recommendations = []
+
+        # Revenue-based recommendations
+        if revenue_trends['growth_rate'] < 0:
+            recommendations.append({
+                'priority': 'high',
+                'category': 'revenue',
+                'message': 'Revenue declining - consider promotional campaigns or service improvements',
+                'action': 'Launch marketing campaign or review pricing strategy'
+            })
+        elif revenue_trends['growth_rate'] > 50:
+            recommendations.append({
+                'priority': 'medium',
+                'category': 'scaling',
+                'message': 'Strong growth detected - consider scaling infrastructure',
+                'action': 'Prepare for increased demand and optimize system capacity'
+            })
+
+        # Client-based recommendations
+        if client_insights['client_retention_rate'] < 80:
+            recommendations.append({
+                'priority': 'high',
+                'category': 'retention',
+                'message': 'Low client retention rate detected',
+                'action': 'Implement client satisfaction surveys and loyalty programs'
+            })
+
+        # Service optimization
+        service_breakdown = revenue_trends['service_breakdown']
+        if service_breakdown:
+            top_service = max(service_breakdown.keys(), key=lambda k: service_breakdown[k]['revenue'])
+            recommendations.append({
+                'priority': 'medium',
+                'category': 'optimization',
+                'message': f'Top performing service: {top_service}',
+                'action': f'Focus marketing efforts on {top_service} and develop similar services'
+            })
+
+        return recommendations
+
+class OASISMonitoring:
+    """Main monitoring and analytics system"""
+
+    def __init__(self):
+        self.logger = OASISLogger()
+
+        # Initialize components
+        try:
+            self.business = BusinessAutomation()
+            self.system_metrics = SystemMetrics()
+            self.business_intelligence = BusinessIntelligence(self.business)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize monitoring components: {e}")
+            sys.exit(1)
+
+        self.monitoring_active = False
+        self.monitoring_interval = 60  # seconds
+
+        self.logger.info("🚀 OASIS Monitoring System initialized")
+
+    def start_monitoring(self):
+        """Start continuous monitoring"""
+        self.monitoring_active = True
+
+        def monitoring_loop():
+            while self.monitoring_active:
+                try:
+                    # Simulate API call monitoring
+                    # In real implementation, this would be called by actual API requests
+                    import random
+                    response_time = random.uniform(0.5, 3.0)
+                    success = random.choice([True] * 9 + [False])  # 90% success rate
+
+                    self.system_metrics.record_api_call(response_time, success)
+
+                    time.sleep(self.monitoring_interval)
+                except Exception as e:
+                    self.logger.error(f"Monitoring loop error: {e}")
+                    time.sleep(5)
+
+        monitoring_thread = threading.Thread(target=monitoring_loop, daemon=True)
+        monitoring_thread.start()
+
+        self.logger.info("📊 Continuous monitoring started")
+
+    def stop_monitoring(self):
+        """Stop continuous monitoring"""
+        self.monitoring_active = False
+        self.logger.info("📊 Monitoring stopped")
+
+    def generate_comprehensive_report(self):
+        """Generate comprehensive system and business report"""
+        # System health
+        system_health = self.system_metrics.get_system_health()
+        performance_24h = self.system_metrics.get_performance_summary(24)
+
+        # Business analytics
+        revenue_trends = self.business_intelligence.analyze_revenue_trends(30)
+        client_insights = self.business_intelligence.get_client_insights()
+        recommendations = self.business_intelligence.generate_business_recommendations()
+
+        # Dashboard
+        dashboard = self.business.get_business_dashboard()
+
+        report = {
+            'timestamp': datetime.now().isoformat(),
+            'system': {
+                'health': system_health,
+                'performance_24h': performance_24h
+            },
+            'business': {
+                'revenue_trends': revenue_trends,
+                'client_insights': client_insights,
+                'dashboard': dashboard
+            },
+            'recommendations': recommendations
+        }
+
+        return report
+
+    def print_dashboard(self):
+        """Print real-time dashboard to console"""
+        report = self.generate_comprehensive_report()
+
+        print("\n" + "="*60)
+        print("🚀 OASIS 2.0 MONITORING DASHBOARD")
+        print("="*60)
+
+        # System Status
+        health = report['system']['health']
+        print(f"\n📊 SYSTEM HEALTH: {health['status'].upper()} ({health['health_score']}%)")
+        print(f"⏱️ Uptime: {health['uptime_formatted']}")
+        print(f"📈 Total Requests: {health['total_requests']}")
+        print(f"✅ Success Rate: {health['success_rate']:.1f}%")
+        print(f"⚡ Avg Response: {health['average_response_time']:.2f}s")
+
+        # Business Metrics
+        revenue = report['business']['revenue_trends']
+        print(f"\n💰 REVENUE (30 days): ${revenue['total_revenue']:.2f}")
+        print(f"📊 Daily Average: ${revenue['daily_average']:.2f}")
+        print(f"📈 Growth Rate: {revenue['growth_rate']:+.1f}%")
+        print(f"🎯 Progress to $10K: {revenue['target_progress']['10k']:.1f}%")
+
+        # Client Insights
+        clients = report['business']['client_insights']
+        print(f"\n👥 CLIENTS: {clients['active_clients']} active ({clients['total_clients']} total)")
+        print(f"💎 Avg Client Value: ${clients['average_client_value']:.2f}")
+        print(f"🔄 Retention Rate: {clients['client_retention_rate']:.1f}%")
+
+        # Recommendations
+        recommendations = report['recommendations']
+        if recommendations:
+            print(f"\n🎯 RECOMMENDATIONS:")
+            for i, rec in enumerate(recommendations[:3], 1):
+                priority_emoji = "🔴" if rec['priority'] == 'high' else "🟡"
+                print(f"{priority_emoji} {i}. {rec['message']}")
+
+        print("="*60)
+
+def main():
+    """Main monitoring system runner"""
+    print("📊 OASIS 2.0 MONITORING & ANALYTICS")
+    print("Real-Time System & Business Intelligence • Zero Heavy Dependencies")
+    print("=" * 70)
+
+    try:
+        # Initialize monitoring
+        monitoring = OASISMonitoring()
+
+        # Start continuous monitoring
+        monitoring.start_monitoring()
+
+        print("\n🚀 Monitoring system started")
+        print("📊 Real-time analytics active")
+        print("💰 Business intelligence enabled")
+        print("\nPress 'd' + Enter to show dashboard, 'q' + Enter to quit")
+
+        # Interactive loop
+        while True:
+            try:
+                user_input = input("\n> ").strip().lower()
+
+                if user_input == 'q':
+                    break
+                elif user_input == 'd':
+                    monitoring.print_dashboard()
+                elif user_input == 'r':
+                    # Generate full report
+                    report = monitoring.generate_comprehensive_report()
+                    print(f"\n📋 Full report generated at: {report['timestamp']}")
+                    print(f"💾 Report data: {len(json.dumps(report))} bytes")
+                else:
+                    print("Commands: 'd' = dashboard, 'r' = report, 'q' = quit")
+
+            except KeyboardInterrupt:
+                break
+
+        # Stop monitoring
+        monitoring.stop_monitoring()
+        print("\n👋 OASIS Monitoring system shutdown complete")
+
+    except Exception as e:
+        print(f"❌ Error in monitoring system: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

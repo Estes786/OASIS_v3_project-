@@ -1,0 +1,325 @@
+"#!/usr/bin/env python3
+"""
+The New Civilization - Ultra-Lightweight AI Platform
+Revolutionary open source AI ecosystem with zero heavy dependencies
+
+Copyright (c) 2024 The New Civilization Project
+Licensed under MIT License
+"""
+
+import os
+import json
+import time
+import logging
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+import urllib.request
+import urllib.parse
+import urllib.error
+
+# Configuration
+HF_TOKEN = os.getenv('HF_TOKEN', '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')
+HF_API_BASE = 'https://api-inference.huggingface.co/models'
+PORT = int(os.getenv('PORT', 7860))
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class HuggingFaceAPI:
+    """Ultra-lightweight Hugging Face API client"""
+
+    def __init__(self, token=None):
+        self.token = token or HF_TOKEN
+        self.api_base = HF_API_BASE
+        self.headers = {
+            'Authorization': f'Bearer {self.token}',
+            'Content-Type': 'application/json'
+        }
+
+        # Default models for different tasks
+        self.models = {
+            'text_generation': 'microsoft/DialoGPT-medium',
+            'sentiment_analysis': 'cardiffnlp/twitter-roberta-base-sentiment-latest',
+            'summarization': 'facebook/bart-large-cnn',
+            'translation': 'Helsinki-NLP/opus-mt-en-fr',
+            'question_answering': 'deepset/roberta-base-squad2'
+        }
+
+    def query_model(self, model_name, payload, max_retries=3):
+        """Query a Hugging Face model with retry logic"""
+        url = f"{self.api_base}/{model_name}"
+        data = json.dumps(payload).encode('utf-8')
+
+        for attempt in range(max_retries):
+            try:
+                request = urllib.request.Request(url, data=data, headers=self.headers)
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    return {'success': True, 'data': result}
+
+            except urllib.error.HTTPError as e:
+                if e.code == 503:  # Model loading
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        logger.info(f"Model loading, waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        return {'success': False, 'error': 'Model unavailable'}
+                else:
+                    return {'success': False, 'error': f'HTTP {e.code}: {e.reason}'}
+
+            except Exception as e:
+                return {'success': False, 'error': str(e)}
+
+        return {'success': False, 'error': 'Max retries exceeded'}
+
+    def generate_text(self, prompt, max_length=50):
+        """Generate text using DialoGPT"""
+        payload = {
+            'inputs': prompt,
+            'parameters': {
+                'max_length': max_length,
+                'temperature': 0.7,
+                'return_full_text': False
+            }
+        }
+        return self.query_model(self.models['text_generation'], payload)
+
+    def analyze_sentiment(self, text):
+        """Analyze sentiment of text"""
+        payload = {'inputs': text}
+        return self.query_model(self.models['sentiment_analysis'], payload)
+
+    def summarize_text(self, text, max_length=100):
+        """Summarize text using BART"""
+        payload = {
+            'inputs': text,
+            'parameters': {
+                'max_length': max_length,
+                'min_length': 30
+            }
+        }
+        return self.query_model(self.models['summarization'], payload)
+
+class TheNewCivilizationHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for The New Civilization API"""
+
+    def __init__(self, *args, **kwargs):
+        self.hf_api = HuggingFaceAPI()
+        super().__init__(*args, **kwargs)
+
+    def do_GET(self):
+        """Handle GET requests"""
+        parsed_path = urlparse(self.path)
+
+        if parsed_path.path == '/':
+            self.serve_homepage()
+        elif parsed_path.path == '/health':
+            self.serve_health_check()
+        elif parsed_path.path == '/api/models':
+            self.serve_models_list()
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_POST(self):
+        """Handle POST requests"""
+        parsed_path = urlparse(self.path)
+
+        # Get request body
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length).decode('utf-8')
+
+        try:
+            data = json.loads(post_data) if post_data else {}
+        except json.JSONDecodeError:
+            self.send_json_response({'error': 'Invalid JSON'}, 400)
+            return
+
+        if parsed_path.path == '/api/generate':
+            self.handle_text_generation(data)
+        elif parsed_path.path == '/api/sentiment':
+            self.handle_sentiment_analysis(data)
+        elif parsed_path.path == '/api/summarize':
+            self.handle_summarization(data)
+        else:
+            self.send_error(404, "Not Found")
+
+    def serve_homepage(self):
+        """Serve the main homepage"""
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>The New Civilization - Ultra-Lightweight AI Platform</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                       margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 800px; margin: 0 auto; background: white; 
+                            padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+                .feature { margin: 20px 0; padding: 15px; background: #ecf0f1; 
+                          border-left: 4px solid #3498db; border-radius: 5px; }
+                .api-endpoint { background: #2c3e50; color: white; padding: 10px; 
+                              border-radius: 5px; font-family: monospace; margin: 10px 0; }
+                .footer { text-align: center; margin-top: 30px; color: #7f8c8d; }
+                .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+                .stat { text-align: center; }
+                .stat-number { font-size: 2em; font-weight: bold; color: #3498db; }
+                .stat-label { color: #7f8c8d; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>ðŸŒŸ The New Civilization</h1>
+                <p style="text-align: center; font-size: 1.2em; color: #34495e;">
+                    Ultra-Lightweight Open Source AI Platform
+                </p>
+
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number">&lt;5MB</div>
+                        <div class="stat-label">Total Footprint</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">100K+</div>
+                        <div class="stat-label">AI Models</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">0</div>
+                        <div class="stat-label">Heavy Dependencies</div>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <h3>ðŸš€ Revolutionary Architecture</h3>
+                    <p>Zero heavy dependencies â€¢ 100% API-first â€¢ Mobile-optimized</p>
+                </div>
+
+                <div class="feature">
+                    <h3>ðŸ¤– AI Services Available</h3>
+                    <div class="api-endpoint">POST /api/generate - Text Generation</div>
+                    <div class="api-endpoint">POST /api/sentiment - Sentiment Analysis</div>
+                    <div class="api-endpoint">POST /api/summarize - Text Summarization</div>
+                </div>
+
+                <div class="feature">
+                    <h3>ðŸ“± Termux Ready</h3>
+                    <p>Perfect for mobile deployment with ultra-lightweight setup</p>
+                </div>
+
+                <div class="footer">
+                    <p>Open Source â€¢ MIT License â€¢ Powered by Hugging Face</p>
+                    <p><a href="https://github.com/the-new-civilization/the-new-civilization">GitHub Repository</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html_content.encode('utf-8'))
+
+    def serve_health_check(self):
+        """Health check endpoint"""
+        health_data = {
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            'version': '2.0.0',
+            'footprint': '<5MB',
+            'dependencies': 'zero_heavy'
+        }
+        self.send_json_response(health_data)
+
+    def serve_models_list(self):
+        """List available models"""
+        models_data = {
+            'available_models': self.hf_api.models,
+            'total_models': '100,000+',
+            'architecture': 'API-first',
+            'provider': 'Hugging Face'
+        }
+        self.send_json_response(models_data)
+
+    def handle_text_generation(self, data):
+        """Handle text generation requests"""
+        prompt = data.get('prompt', '')
+        max_length = data.get('max_length', 50)
+
+        if not prompt:
+            self.send_json_response({'error': 'Prompt is required'}, 400)
+            return
+
+        result = self.hf_api.generate_text(prompt, max_length)
+        self.send_json_response(result)
+
+    def handle_sentiment_analysis(self, data):
+        """Handle sentiment analysis requests"""
+        text = data.get('text', '')
+
+        if not text:
+            self.send_json_response({'error': 'Text is required'}, 400)
+            return
+
+        result = self.hf_api.analyze_sentiment(text)
+        self.send_json_response(result)
+
+    def handle_summarization(self, data):
+        """Handle text summarization requests"""
+        text = data.get('text', '')
+        max_length = data.get('max_length', 100)
+
+        if not text:
+            self.send_json_response({'error': 'Text is required'}, 400)
+            return
+
+        result = self.hf_api.summarize_text(text, max_length)
+        self.send_json_response(result)
+
+    def send_json_response(self, data, status_code=200):
+        """Send JSON response"""
+        self.send_response(status_code)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        self.wfile.write(json.dumps(data, indent=2).encode('utf-8'))
+
+    def log_message(self, format, *args):
+        """Custom log message format"""
+        logger.info(f"{self.client_address[0]} - {format % args}")
+
+def main():
+    """Main application entry point"""
+    logger.info("ðŸŒŸ Starting The New Civilization - Ultra-Lightweight AI Platform")
+    logger.info(f"ðŸ“± Server will run on port {PORT}")
+    logger.info(f"ðŸš€ Zero heavy dependencies â€¢ API-first architecture")
+
+    # Validate HF token
+    if not HF_TOKEN or HF_TOKEN == 'your_token_here':
+        logger.error("âŒ HF_TOKEN not configured!")
+        logger.error("Please set the HF_TOKEN environment variable")
+        return
+
+    try:
+        server = HTTPServer(('0.0.0.0', PORT), TheNewCivilizationHandler)
+        logger.info(f"âœ… Server started successfully on http://0.0.0.0:{PORT}")
+        logger.info("ðŸŒ Access the platform at http://localhost:7860")
+        server.serve_forever()
+
+    except KeyboardInterrupt:
+        logger.info("ðŸ›‘ Server stopped by user")
+    except Exception as e:
+        logger.error(f"âŒ Server error: {e}")
+
+if __name__ == "__main__":
+    main()"

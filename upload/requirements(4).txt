@@ -1,0 +1,64 @@
+# OASIS 2.0 Ultra-Lightweight Dependencies
+# Mobile AI Revolution • Zero Heavy Dependencies
+
+# ========================================
+# CORE DEPENDENCIES (REQUIRED)
+# ========================================
+# HTTP requests for API communication
+requests>=2.28.0
+
+# Environment configuration management
+python-dotenv>=0.19.0
+
+# Hugging Face API integration
+huggingface-hub>=0.14.0
+
+# ========================================
+# OPTIONAL DEPENDENCIES
+# ========================================
+# Uncomment if needed for specific features
+
+# JSON processing (usually built-in)
+# simplejson>=3.18.0
+
+# Enhanced datetime handling
+# python-dateutil>=2.8.0
+
+# Better CLI interface
+# click>=8.0.0
+
+# Process monitoring (Termux compatible)
+# psutil>=5.9.0
+
+# ========================================
+# DEVELOPMENT DEPENDENCIES  
+# ========================================
+# Uncomment for development only
+
+# Code formatting
+# black>=22.0.0
+
+# Linting
+# flake8>=4.0.0
+
+# Testing
+# pytest>=7.0.0
+
+# ========================================
+# NOTES
+# ========================================
+# - Keep dependencies minimal for mobile performance
+# - All ML/DL processing done via APIs (no local models)
+# - Total installation size: < 50MB
+# - Compatible with Termux, standard Python environments
+# - No numpy, torch, tensorflow, pandas, scikit-learn needed!
+
+# Installation:
+# pip install -r requirements.txt
+
+# Termux Installation:
+# pkg install python
+# pip install -r requirements.txt
+
+# Verification:
+# python -c "import requests, dotenv, huggingface_hub; print('✅ All dependencies ready!')"

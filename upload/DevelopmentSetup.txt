@@ -1,0 +1,130 @@
+"#!/bin/bash
+# FMAA BDI Agent - Development Environment Setup
+# Local development and testing configuration
+
+set -e
+
+echo "ðŸ› ï¸ FMAA BDI Agent - Development Setup"
+echo "====================================="
+
+# Check Python version
+python_version=$(python3 --version 2>&1 | grep -oP '\d+\.\d+')
+required_version="3.8"
+
+if (( $(echo "$python_version < $required_version" | bc -l) )); then
+    echo "âŒ Python $required_version or higher required. Found: $python_version"
+    exit 1
+fi
+
+echo "âœ… Python version: $python_version"
+
+# Create virtual environment
+echo "ðŸ Setting up virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+
+# Install development dependencies
+echo "ðŸ“¦ Installing development dependencies..."
+pip install --upgrade pip
+pip install -r configs/requirements-dev.txt
+
+# Create development directories
+echo "ðŸ“ Creating development directories..."
+mkdir -p {data,logs,tests,docs}/{beliefs,desires,integration}
+mkdir -p temp/test_data
+
+# Set up development environment variables
+echo "ðŸ”§ Setting up development environment..."
+cat > .env.dev << EOF
+# FMAA BDI Agent Development Configuration
+ENVIRONMENT=development
+DEBUG=true
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/fmaa_dev.log
+
+# Development-specific settings
+ENABLE_DEBUG_LOGGING=true
+TESTING_MODE=true
+AUTO_RELOAD=true
+
+# Paths
+PYTHONPATH=\${PWD}/core:\${PWD}
+DATA_DIR=./data
+TEMP_DIR=./temp
+EOF
+
+# Create development test runner
+cat > run_tests.sh << 'EOF'
+#!/bin/bash
+echo "ðŸ§ª Running FMAA BDI Agent Tests"
+echo "================================"
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Load development environment
+source .env.dev
+
+# Run unit tests
+echo "ðŸ“‹ Running unit tests..."
+python -m unittest discover tests/ -v
+
+# Run integration tests
+echo "ðŸ”— Running integration tests..."
+python tests/integration_tests.py
+
+# Run performance tests
+echo "âš¡ Running performance tests..."
+python tests/performance_tests.py
+
+echo "âœ… All tests completed!"
+EOF
+
+chmod +x run_tests.sh
+
+# Create development server script
+cat > dev_server.sh << 'EOF' 
+#!/bin/bash
+echo "ðŸš€ Starting FMAA BDI Agent Development Server"
+
+# Activate virtual environment
+source venv/bin/activate
+source .env.dev
+
+# Start development servers with auto-reload
+echo "ðŸ§  Starting Belief Manager..."
+python -c "
+import sys
+sys.path.insert(0, 'core')
+from fixed_belief_manager import BeliefManager
+bm = BeliefManager()
+print('Belief Manager ready on development mode')
+bm.run_server()
+" &
+
+echo "ðŸ’­ Starting Desire Engine..."  
+python -c "
+import sys
+sys.path.insert(0, 'core')
+from fixed_desire_engine import EnhancedDesireEngine
+de = EnhancedDesireEngine()
+print('Desire Engine ready on development mode')
+de.run_server()
+" &
+
+echo "âœ… Development servers started!"
+echo "ðŸ“Š Check logs: tail -f logs/fmaa_dev.log"
+echo "ðŸ”„ Auto-reload enabled for code changes"
+
+wait
+EOF
+
+chmod +x dev_server.sh
+
+echo "âœ… Development environment ready!"
+echo ""
+echo "To get started:"
+echo "  1. source venv/bin/activate"
+echo "  2. source .env.dev" 
+echo "  3. ./run_tests.sh         # Run tests"
+echo "  4. ./dev_server.sh        # Start dev servers""

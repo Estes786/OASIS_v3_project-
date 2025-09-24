@@ -1,0 +1,35 @@
+"{
+  "hf_spaces": {
+    "base_url": "https://your-username-oasis-v3.hf.space",
+    "token": "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",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "models": {
+      "sentiment": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+      "emotion": "j-hartmann/emotion-english-distilroberta-base",
+      "generation": "microsoft/DialoGPT-large",
+      "summarization": "facebook/bart-large-cnn",
+      "translation": "Helsinki-NLP/opus-mt-en-id"
+    }
+  },
+  "business": {
+    "target_monthly_revenue": 50000,
+    "pricing_per_request": 0.025,
+    "batch_size": 10,
+    "revenue_tracking": true,
+    "analytics_enabled": true
+  },
+  "mobile": {
+    "max_response_time": 0.5,
+    "cache_enabled": true,
+    "compression": true,
+    "offline_mode": false,
+    "max_batch_size": 20
+  },
+  "orchestration": {
+    "auto_retry": true,
+    "fallback_models": true,
+    "load_balancing": false,
+    "queue_management": true
+  }
+}"

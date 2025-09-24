@@ -1,0 +1,367 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+interface RevenueEvent {
+  user_id?: string
+  revenue_stream: 'api_calls' | 'premium_subscription' | 'enterprise_subscription' | 'data_insights'
+  amount: number
+  currency?: string
+  description?: string
+  metadata?: Record<string, any>
+  transaction_id?: string
+  payment_method?: string
+}
+
+interface APICallEvent {
+  user_id?: string
+  endpoint: string
+  method: string
+  request_data?: Record<string, any>
+  response_data?: Record<string, any>
+  processing_time_ms?: number
+  status_code: number
+  error_message?: string
+  device_type?: string
+  user_agent?: string
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    )
+
+    const { action, data } = await req.json()
+
+    switch (action) {
+      case 'track_api_call':
+        return await trackAPICall(supabaseClient, data as APICallEvent)
+      
+      case 'record_revenue':
+        return await recordRevenue(supabaseClient, data as RevenueEvent)
+      
+      case 'get_revenue_dashboard':
+        return await getRevenueDashboard(supabaseClient, data)
+      
+      case 'get_user_analytics':
+        return await getUserAnalytics(supabaseClient, data)
+      
+      case 'update_business_metrics':
+        return await updateBusinessMetrics(supabaseClient, data)
+      
+      default:
+        return new Response(
+          JSON.stringify({ error: 'Unknown action' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+    }
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})
+
+async function trackAPICall(supabase: any, callData: APICallEvent) {
+  // Calculate revenue based on pricing model
+  const basePrice = 0.01 // $0.01 per API call
+  const revenue = callData.status_code === 200 ? basePrice : 0
+
+  // Insert API call record
+  const { data: apiCall, error: apiError } = await supabase
+    .from('api_calls')
+    .insert({
+      user_id: callData.user_id,
+      endpoint: callData.endpoint,
+      method: callData.method,
+      request_data: callData.request_data,
+      response_data: callData.response_data,
+      processing_time_ms: callData.processing_time_ms,
+      status_code: callData.status_code,
+      error_message: callData.error_message,
+      revenue_generated: revenue,
+      device_type: callData.device_type,
+      user_agent: callData.user_agent,
+    })
+
+  if (apiError) {
+    throw new Error(`Failed to track API call: ${apiError.message}`)
+  }
+
+  // Update user's total API calls and revenue if successful
+  if (callData.user_id && revenue > 0) {
+    const { error: userError } = await supabase
+      .from('users')
+      .update({
+        total_api_calls: supabase.raw('total_api_calls + 1'),
+        total_revenue_generated: supabase.raw(`total_revenue_generated + ${revenue}`),
+        last_active_at: new Date().toISOString(),
+      })
+      .eq('id', callData.user_id)
+
+    if (userError) {
+      console.error('Failed to update user stats:', userError)
+    }
+
+    // Record revenue if applicable
+    if (revenue > 0) {
+      await recordRevenue(supabase, {
+        user_id: callData.user_id,
+        revenue_stream: 'api_calls',
+        amount: revenue,
+        description: `API call to ${callData.endpoint}`,
+        metadata: {
+          endpoint: callData.endpoint,
+          method: callData.method,
+          processing_time_ms: callData.processing_time_ms,
+        }
+      })
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      api_call_id: apiCall?.[0]?.id,
+      revenue_generated: revenue 
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function recordRevenue(supabase: any, revenueData: RevenueEvent) {
+  const { data, error } = await supabase
+    .from('revenue_records')
+    .insert({
+      user_id: revenueData.user_id,
+      revenue_stream: revenueData.revenue_stream,
+      amount: revenueData.amount,
+      currency: revenueData.currency || 'USD',
+      description: revenueData.description,
+      metadata: revenueData.metadata,
+      transaction_id: revenueData.transaction_id,
+      payment_method: revenueData.payment_method,
+    })
+
+  if (error) {
+    throw new Error(`Failed to record revenue: ${error.message}`)
+  }
+
+  return new Response(
+    JSON.stringify({ success: true, revenue_record_id: data?.[0]?.id }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getRevenueDashboard(supabase: any, params: any) {
+  const { period = 'monthly', limit = 12 } = params
+
+  // Get revenue by stream for the specified period
+  const { data: revenueByStream, error: streamError } = await supabase
+    .rpc('get_revenue_by_stream', { 
+      time_period: period,
+      limit_records: limit 
+    })
+
+  if (streamError) {
+    console.error('Revenue by stream error:', streamError)
+  }
+
+  // Get total metrics
+  const { data: totalMetrics, error: metricsError } = await supabase
+    .from('business_metrics')
+    .select('metric_name, metric_value, metric_type')
+    .in('metric_name', ['revenue_target', 'user_acquisition_target', 'api_calls_target'])
+    .order('recorded_at', { ascending: false })
+    .limit(10)
+
+  if (metricsError) {
+    console.error('Business metrics error:', metricsError)
+  }
+
+  // Get current month revenue
+  const currentMonth = new Date().toISOString().slice(0, 7) + '-01'
+  const { data: currentRevenue, error: currentError } = await supabase
+    .rpc('get_monthly_revenue', { target_month: currentMonth })
+
+  if (currentError) {
+    console.error('Current revenue error:', currentError)
+  }
+
+  // Calculate progress towards $50K target
+  const totalCurrentRevenue = currentRevenue?.reduce((sum: number, item: any) => sum + parseFloat(item.amount), 0) || 0
+  const revenueTarget = 50000
+  const progressPercentage = (totalCurrentRevenue / revenueTarget) * 100
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data: {
+        current_month_revenue: totalCurrentRevenue,
+        revenue_target: revenueTarget,
+        progress_percentage: Math.round(progressPercentage * 100) / 100,
+        revenue_by_stream: revenueByStream || [],
+        revenue_breakdown: currentRevenue || [],
+        business_metrics: totalMetrics || [],
+        target_status: progressPercentage >= 100 ? 'achieved' : 'in_progress',
+        projected_monthly: totalCurrentRevenue > 0 ? (totalCurrentRevenue * 30 / new Date().getDate()) : 0
+      }
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getUserAnalytics(supabase: any, params: any) {
+  const { user_id } = params
+
+  if (user_id) {
+    // Get specific user analytics
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select(`
+        id,
+        email,
+        subscription_tier,
+        total_api_calls,
+        total_revenue_generated,
+        created_at,
+        last_active_at,
+        termux_setup_completed
+      `)
+      .eq('id', user_id)
+      .single()
+
+    if (userError) {
+      throw new Error(`Failed to get user analytics: ${userError.message}`)
+    }
+
+    // Get user's recent API calls
+    const { data: recentCalls, error: callsError } = await supabase
+      .from('api_calls')
+      .select('endpoint, method, status_code, revenue_generated, created_at')
+      .eq('user_id', user_id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          user: user,
+          recent_api_calls: recentCalls || [],
+          total_revenue_generated: user.total_revenue_generated,
+          api_calls_this_month: recentCalls?.filter((call: any) => 
+            new Date(call.created_at).getMonth() === new Date().getMonth()
+          ).length || 0
+        }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  } else {
+    // Get overall user analytics
+    const { data: userStats, error: statsError } = await supabase
+      .from('user_analytics')
+      .select('*')
+
+    if (statsError) {
+      throw new Error(`Failed to get user analytics: ${statsError.message}`)
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          user_statistics: userStats || []
+        }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+}
+
+async function updateBusinessMetrics(supabase: any, metricsData: any) {
+  const { metrics } = metricsData
+
+  if (!Array.isArray(metrics)) {
+    throw new Error('Metrics data must be an array')
+  }
+
+  const updates = []
+
+  for (const metric of metrics) {
+    const { data, error } = await supabase
+      .from('business_metrics')
+      .insert({
+        metric_name: metric.name,
+        metric_value: metric.value,
+        metric_type: metric.type,
+        time_period: metric.period || 'daily',
+        metadata: metric.metadata || {}
+      })
+
+    if (error) {
+      console.error(`Failed to update metric ${metric.name}:`, error)
+    } else {
+      updates.push(metric.name)
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      updated_metrics: updates
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+/* Example usage:
+
+// Track API call
+POST /functions/v1/revenue-tracker
+{
+  "action": "track_api_call",
+  "data": {
+    "user_id": "123e4567-e89b-12d3-a456-426614174000",
+    "endpoint": "/api/generate",
+    "method": "POST",
+    "status_code": 200,
+    "processing_time_ms": 1500,
+    "device_type": "mobile"
+  }
+}
+
+// Record revenue
+POST /functions/v1/revenue-tracker  
+{
+  "action": "record_revenue",
+  "data": {
+    "user_id": "123e4567-e89b-12d3-a456-426614174000",
+    "revenue_stream": "premium_subscription",
+    "amount": 9.99,
+    "description": "Monthly premium subscription"
+  }
+}
+
+// Get revenue dashboard
+POST /functions/v1/revenue-tracker
+{
+  "action": "get_revenue_dashboard",
+  "data": {
+    "period": "monthly",
+    "limit": 12
+  }
+}
+
+*/

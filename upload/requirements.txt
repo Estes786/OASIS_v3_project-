@@ -1,0 +1,7 @@
+# THE NEW CIVILIZATION - Ultra-Lightweight Dependencies
+# Zero heavy libraries philosophy - Only essential packages
+
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+requests==2.31.0
+pydantic==2.5.0

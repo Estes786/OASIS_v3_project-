@@ -1,0 +1,144 @@
+"{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "name": "oasis-v3-ai-ecosystem",
+  "alias": ["oasis-v3.com", "www.oasis-v3.com"],
+  "description": "OASIS v3 - Ultra-Lightweight AI Superintelligence Ecosystem | $50K+/month Revenue Machine",
+
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_HF_SPACES_URL": "@hf_spaces_url",
+      "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key", 
+      "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
+      "NEXT_PUBLIC_APP_VERSION": "3.0.0",
+      "NEXT_PUBLIC_REVENUE_TARGET": "50000",
+      "NEXT_PUBLIC_ANALYTICS_ID": "@google_analytics_id",
+      "NEXT_PUBLIC_HOTJAR_ID": "@hotjar_id",
+      "NEXT_PUBLIC_CRISP_WEBSITE_ID": "@crisp_website_id"
+    }
+  },
+
+  "functions": {
+    "pages/api/payments/**/*.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "pages/api/subscription/**/*.js": {
+      "runtime": "nodejs18.x", 
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "pages/api/analytics/**/*.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30,
+      "memory": 256
+    }
+  },
+
+  "regions": ["iad1", "sfo1", "lhr1", "sin1"],
+
+  "redirects": [
+    {
+      "source": "/demo",
+      "destination": "/#ai-processing-demo",
+      "permanent": false
+    },
+    {
+      "source": "/revenue",
+      "destination": "/#revenue-dashboard", 
+      "permanent": false
+    },
+    {
+      "source": "/pricing",
+      "destination": "/#subscription-plans",
+      "permanent": false
+    },
+    {
+      "source": "/termux",
+      "destination": "/#termux-setup",
+      "permanent": false
+    },
+    {
+      "source": "/docs",
+      "destination": "https://docs.oasis-v3.com",
+      "permanent": false
+    }
+  ],
+
+  "rewrites": [
+    {
+      "source": "/api/proxy/(.*)",
+      "destination": "https://$HF_SPACES_URL/api/$1"
+    }
+  ],
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options", 
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods", 
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Requested-With"
+        }
+      ]
+    }
+  ],
+
+  "crons": [
+    {
+      "path": "/api/analytics/hourly-report",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/revenue/daily-calculation", 
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/subscriptions/billing-check",
+      "schedule": "0 0 * * *"
+    }
+  ],
+
+  "env": {
+    "STRIPE_SECRET_KEY": "@stripe_secret_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "QUANTUM_API_KEY": "@quantum_api_key",
+    "WEBHOOK_SECRET": "@webhook_secret"
+  }
+}"

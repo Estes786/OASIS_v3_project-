@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Ultra-Lightweight API Orchestrator
+Pure API-First Architecture - NO HEAVY DEPENDENCIES!
+
+This is the heart of OASIS 2.0 - managing all AI operations through 
+pure HTTP requests to Hugging Face APIs without any local processing.
+"""
+
+import os
+import sys
+import json
+import time
+import requests
+from datetime import datetime
+from pathlib import Path
+from enum import Enum
+
+# Add config to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "config"))
+
+# Try to import config, fallback to basic setup
+try:
+    from oasis_config import config
+except ImportError:
+    # Fallback configuration if config file not available
+    class FallbackConfig:
+        HF_TOKEN = os.getenv("HF_TOKEN", "")
+        HF_API_BASE = "https://api-inference.huggingface.co/models"
+        API_TIMEOUT = 60
+        DEFAULT_MODELS = {
+            "text_generation": "microsoft/DialoGPT-medium",
+            "text_classification": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "summarization": "facebook/bart-large-cnn",
+            "translation": "Helsinki-NLP/opus-mt-en-id"
+        }
+        PRICING = {
+            "text_generation": 0.05,
+            "text_classification": 0.01,
+            "summarization": 0.03,
+            "translation": 0.02
+        }
+    config = FallbackConfig()
+
+class TaskType(Enum):
+    """Supported AI task types for API-first processing"""
+    TEXT_GENERATION = "text_generation"
+    TEXT_CLASSIFICATION = "text_classification"
+    SUMMARIZATION = "summarization"
+    TRANSLATION = "translation"
+
+class OasisOrchestrator:
+    """Ultra-lightweight AI orchestrator using pure API calls"""
+    
+    def __init__(self):
+        self.stats = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "total_revenue": 0.0
+        }
+        
+        print("🚀 OASIS 2.0 API Orchestrator initialized (Ultra-Lightweight)")
+        print(f"📡 API Base: {config.HF_API_BASE}")
+        
+        if not config.HF_TOKEN:
+            print("⚠️ WARNING: No HF_TOKEN found. API calls will be rate-limited.")
+            print("   Set HF_TOKEN environment variable for full access.")
+    
+    def query_hf_api(self, model_id: str, payload: dict, task: str) -> dict:
+        """Send request to Hugging Face Inference API"""
+        if not config.HF_TOKEN:
+            print("❌ ERROR: HF_TOKEN required for API calls")
+            return {"error": "No API token provided"}
+        
+        api_url = f"{config.HF_API_BASE}/{model_id}"
+        headers = {"Authorization": f"Bearer {config.HF_TOKEN}"}
+        
+        print(f"📡 Calling HF API: {task} using {model_id}")
+        
+        try:
+            response = requests.post(
+                api_url, 
+                headers=headers, 
+                json=payload, 
+                timeout=config.API_TIMEOUT
+            )
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.exceptions.RequestException as e:
+            print(f"❌ API request failed: {e}")
+            return {"error": str(e)}
+    
+    def process_request(self, task_type: TaskType, input_data: str, model_name: str = None, parameters: dict = None) -> dict:
+        """Process an AI request using pure API calls"""
+        self.stats["total_requests"] += 1
+        start_time = time.time()
+        
+        # Get model
+        model = model_name if model_name else config.DEFAULT_MODELS.get(task_type.value)
+        if not model:
+            self.stats["failed_requests"] += 1
+            return {"status": "error", "error": f"No model found for {task_type.value}"}
+        
+        # Prepare payload
+        payload = {"inputs": input_data}
+        if parameters:
+            payload.update({"parameters": parameters})
+        
+        try:
+            # Call API
+            result = self.query_hf_api(model, payload, task_type.value)
+            
+            if "error" in result:
+                self.stats["failed_requests"] += 1
+                return {"status": "error", "error": result["error"]}
+            
+            # Process result based on task type
+            processed_result = self._process_result(task_type, result)
+            
+            # Calculate metrics
+            processing_time = time.time() - start_time
+            revenue = config.PRICING.get(task_type.value, 0.01)
+            self.stats["successful_requests"] += 1
+            self.stats["total_revenue"] += revenue
+            
+            print(f"✅ Request completed in {processing_time:.2f}s - Revenue: ${revenue:.2f}")
+            
+            return {
+                "status": "success",
+                "result": processed_result,
+                "processing_time": processing_time,
+                "revenue": revenue,
+                "model_used": model,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.stats["failed_requests"] += 1
+            print(f"❌ Processing failed: {e}")
+            return {"status": "error", "error": str(e)}
+    
+    def _process_result(self, task_type: TaskType, raw_result) -> dict:
+        """Process raw API result based on task type"""
+        if task_type == TaskType.TEXT_GENERATION:
+            if isinstance(raw_result, list) and len(raw_result) > 0:
+                return {"generated_text": raw_result[0].get("generated_text", "")}
+            return {"generated_text": str(raw_result)}
+        
+        elif task_type == TaskType.TEXT_CLASSIFICATION:
+            if isinstance(raw_result, list) and len(raw_result) > 0:
+                return {"classification": raw_result[0]}
+            return {"classification": raw_result}
+        
+        elif task_type == TaskType.SUMMARIZATION:
+            if isinstance(raw_result, list) and len(raw_result) > 0:
+                return {"summary": raw_result[0].get("summary_text", "")}
+            return {"summary": str(raw_result)}
+        
+        elif task_type == TaskType.TRANSLATION:
+            if isinstance(raw_result, list) and len(raw_result) > 0:
+                return {"translation": raw_result[0].get("translation_text", "")}
+            return {"translation": str(raw_result)}
+        
+        return {"result": raw_result}
+    
+    def display_stats(self):
+        """Display system statistics"""
+        print("\n" + "="*50)
+        print("📊 OASIS 2.0 STATISTICS")
+        print("="*50)
+        print(f"📈 Total Requests: {self.stats['total_requests']}")
+        print(f"✅ Successful: {self.stats['successful_requests']}")
+        print(f"❌ Failed: {self.stats['failed_requests']}")
+        print(f"💰 Revenue Generated: ${self.stats['total_revenue']:.2f}")
+        
+        if self.stats['total_requests'] > 0:
+            success_rate = (self.stats['successful_requests'] / self.stats['total_requests']) * 100
+            print(f"🎯 Success Rate: {success_rate:.1f}%")
+        
+        print("="*50 + "\n")
+    
+    def interactive_mode(self):
+        """Start interactive command-line interface"""
+        print("\n🎮 OASIS 2.0 INTERACTIVE MODE")
+        print("="*40)
+        print("Available commands:")
+        print("• 'text' - Text Generation")
+        print("• 'classify' - Text Classification") 
+        print("• 'summarize' - Text Summarization")
+        print("• 'translate' - Translation (EN->ID)")
+        print("• 'stats' - Show Statistics")
+        print("• 'quit' - Exit")
+        print("="*40 + "\n")
+        
+        while True:
+            try:
+                command = input("🚀 Enter command: ").strip().lower()
+                
+                if command == "quit":
+                    print("👋 Goodbye!")
+                    break
+                
+                elif command == "stats":
+                    self.display_stats()
+                
+                elif command == "text":
+                    text = input("Enter prompt for text generation: ")
+                    if text.strip():
+                        result = self.process_request(TaskType.TEXT_GENERATION, text)
+                        if result["status"] == "success":
+                            print(f"🤖 Generated: {result['result']['generated_text']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif command == "classify":
+                    text = input("Enter text to classify: ")
+                    if text.strip():
+                        result = self.process_request(TaskType.TEXT_CLASSIFICATION, text)
+                        if result["status"] == "success":
+                            print(f"📊 Classification: {result['result']['classification']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif command == "summarize":
+                    text = input("Enter text to summarize: ")
+                    if text.strip():
+                        result = self.process_request(TaskType.SUMMARIZATION, text)
+                        if result["status"] == "success":
+                            print(f"📝 Summary: {result['result']['summary']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif command == "translate":
+                    text = input("Enter text to translate (EN->ID): ")
+                    if text.strip():
+                        result = self.process_request(TaskType.TRANSLATION, text)
+                        if result["status"] == "success":
+                            print(f"🌐 Translation: {result['result']['translation']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                else:
+                    print("❓ Unknown command. Type 'quit' to exit.")
+            
+            except KeyboardInterrupt:
+                print("\n👋 Interrupted by user. Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+
+def main():
+    """Main entry point"""
+    print("🌟 OASIS 2.0 - ULTRA-LIGHTWEIGHT AI ORCHESTRATOR 🌟")
+    print("Pure API-First Architecture | Zero Heavy Dependencies")
+    print("-" * 60)
+    
+    orchestrator = OasisOrchestrator()
+    
+    # Check if running in interactive mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
+        orchestrator.interactive_mode()
+    else:
+        # Demo mode
+        print("\n🎬 DEMO MODE - Testing API calls...")
+        
+        # Test text generation
+        print("\n1️⃣ Testing Text Generation:")
+        result = orchestrator.process_request(
+            TaskType.TEXT_GENERATION, 
+            "The future of AI is"
+        )
+        print(f"Result: {result}")
+        
+        # Test classification
+        print("\n2️⃣ Testing Text Classification:")
+        result = orchestrator.process_request(
+            TaskType.TEXT_CLASSIFICATION, 
+            "This product is amazing!"
+        )
+        print(f"Result: {result}")
+        
+        # Show stats
+        orchestrator.display_stats()
+        
+        print("🚀 Run with --interactive flag for interactive mode")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,675 @@
+#!/usr/bin/env python3
+"""
+OASIS v3 AI Processing Engine
+Comprehensive AI/ML/DL Processing Modules
+
+Advanced machine learning and deep learning capabilities powered by Hugging Face
+transformers and inference API. Supports multiple AI modalities including text,
+vision, audio, and multimodal processing.
+
+Author: OASIS Team
+Version: 3.0.0
+License: MIT
+"""
+
+import os
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any, Union, Tuple
+import json
+import base64
+import io
+from pathlib import Path
+
+# Core ML libraries
+import numpy as np
+from huggingface_hub import InferenceClient, HfApi
+import requests
+from PIL import Image
+import torch
+import transformers
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Environment configuration
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+MODEL_CACHE_DIR = os.getenv("MODEL_CACHE_DIR", "./model_cache")
+
+# Initialize clients
+if HF_TOKEN:
+    hf_client = InferenceClient(token=HF_TOKEN)
+    hf_api = HfApi(token=HF_TOKEN)
+else:
+    hf_client = InferenceClient()
+    hf_api = HfApi()
+
+class AIModelRegistry:
+    """Registry for available AI models and their capabilities"""
+    
+    def __init__(self):
+        self.models = {
+            "text_generation": {
+                "gpt2": {
+                    "model_id": "gpt2",
+                    "description": "OpenAI GPT-2 for general text generation",
+                    "max_tokens": 1024,
+                    "capabilities": ["generation", "completion"]
+                },
+                "dialogpt": {
+                    "model_id": "microsoft/DialoGPT-large", 
+                    "description": "Microsoft conversational AI model",
+                    "max_tokens": 512,
+                    "capabilities": ["conversation", "dialogue"]
+                },
+                "blenderbot": {
+                    "model_id": "facebook/blenderbot-400M-distill",
+                    "description": "Facebook BlenderBot for open-domain chatting",
+                    "max_tokens": 256,
+                    "capabilities": ["conversation", "chat"]
+                }
+            },
+            "text_classification": {
+                "sentiment_roberta": {
+                    "model_id": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+                    "description": "RoBERTa-based sentiment analysis",
+                    "classes": ["negative", "neutral", "positive"],
+                    "capabilities": ["sentiment", "emotion"]
+                },
+                "emotion_bert": {
+                    "model_id": "j-hartmann/emotion-english-distilroberta-base",
+                    "description": "Emotion classification model",
+                    "classes": ["anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise"],
+                    "capabilities": ["emotion", "mood"]
+                }
+            },
+            "question_answering": {
+                "roberta_squad": {
+                    "model_id": "deepset/roberta-base-squad2",
+                    "description": "RoBERTa fine-tuned on SQuAD 2.0",
+                    "capabilities": ["qa", "reading_comprehension"]
+                },
+                "distilbert_squad": {
+                    "model_id": "distilbert-base-uncased-distilled-squad",
+                    "description": "DistilBERT for question answering",
+                    "capabilities": ["qa", "fast_inference"]
+                }
+            },
+            "summarization": {
+                "bart_cnn": {
+                    "model_id": "facebook/bart-large-cnn",
+                    "description": "BART fine-tuned for CNN/DailyMail summarization",
+                    "max_length": 1024,
+                    "capabilities": ["summarization", "abstractive"]
+                },
+                "t5_small": {
+                    "model_id": "t5-small",
+                    "description": "T5 small model for summarization",
+                    "max_length": 512,
+                    "capabilities": ["summarization", "fast"]
+                }
+            },
+            "image_classification": {
+                "vit_base": {
+                    "model_id": "google/vit-base-patch16-224",
+                    "description": "Vision Transformer for image classification",
+                    "input_size": (224, 224),
+                    "capabilities": ["classification", "vision"]
+                },
+                "resnet": {
+                    "model_id": "microsoft/resnet-50",
+                    "description": "ResNet-50 for image classification",
+                    "input_size": (224, 224),
+                    "capabilities": ["classification", "fast_vision"]
+                }
+            },
+            "object_detection": {
+                "detr": {
+                    "model_id": "facebook/detr-resnet-50",
+                    "description": "DETR for object detection",
+                    "capabilities": ["detection", "localization"]
+                }
+            },
+            "translation": {
+                "opus_mt": {
+                    "model_id": "Helsinki-NLP/opus-mt-en-de",
+                    "description": "English to German translation",
+                    "capabilities": ["translation", "multilingual"]
+                }
+            }
+        }
+    
+    def get_model_info(self, category: str, model_name: str) -> Optional[Dict[str, Any]]:
+        """Get information about a specific model"""
+        return self.models.get(category, {}).get(model_name)
+    
+    def list_models_by_capability(self, capability: str) -> List[Dict[str, Any]]:
+        """List all models with a specific capability"""
+        matching_models = []
+        for category, models in self.models.items():
+            for model_name, model_info in models.items():
+                if capability in model_info.get("capabilities", []):
+                    matching_models.append({
+                        "category": category,
+                        "name": model_name,
+                        **model_info
+                    })
+        return matching_models
+
+class AdvancedTextProcessor:
+    """Advanced text processing with multiple AI models"""
+    
+    def __init__(self, model_registry: AIModelRegistry):
+        self.registry = model_registry
+        self.cache = {}
+    
+    async def generate_text(self, 
+                          prompt: str,
+                          model_name: str = "gpt2",
+                          max_tokens: int = 512,
+                          temperature: float = 0.7,
+                          top_p: float = 0.9) -> Dict[str, Any]:
+        """Advanced text generation with multiple models"""
+        try:
+            model_info = self.registry.get_model_info("text_generation", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown text generation model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            max_allowed = model_info.get("max_tokens", 1024)
+            max_tokens = min(max_tokens, max_allowed)
+            
+            # Use Hugging Face Inference API
+            response = hf_client.text_generation(
+                prompt=prompt,
+                model=model_id,
+                max_new_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                return_full_text=False
+            )
+            
+            return {
+                "status": "success",
+                "generated_text": response,
+                "model_used": model_id,
+                "model_info": model_info,
+                "parameters": {
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p
+                },
+                "metadata": {
+                    "prompt_length": len(prompt),
+                    "generated_length": len(response) if isinstance(response, str) else 0,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Text generation error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+    
+    async def classify_text(self,
+                          text: str,
+                          model_name: str = "sentiment_roberta",
+                          return_all_scores: bool = True) -> Dict[str, Any]:
+        """Advanced text classification"""
+        try:
+            model_info = self.registry.get_model_info("text_classification", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown text classification model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            
+            response = hf_client.text_classification(
+                text=text,
+                model=model_id,
+                return_all_scores=return_all_scores
+            )
+            
+            return {
+                "status": "success",
+                "classifications": response,
+                "model_used": model_id,
+                "model_info": model_info,
+                "predicted_class": response[0]["label"] if response else None,
+                "confidence": response[0]["score"] if response else 0,
+                "all_scores": response if return_all_scores else None,
+                "metadata": {
+                    "text_length": len(text),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Text classification error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+    
+    async def answer_question(self,
+                            question: str,
+                            context: str,
+                            model_name: str = "roberta_squad") -> Dict[str, Any]:
+        """Advanced question answering"""
+        try:
+            model_info = self.registry.get_model_info("question_answering", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown QA model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            
+            response = hf_client.question_answering(
+                question=question,
+                context=context,
+                model=model_id
+            )
+            
+            return {
+                "status": "success",
+                "answer": response,
+                "model_used": model_id,
+                "model_info": model_info,
+                "confidence": response.get("score", 0) if isinstance(response, dict) else 0,
+                "start_position": response.get("start", -1) if isinstance(response, dict) else -1,
+                "end_position": response.get("end", -1) if isinstance(response, dict) else -1,
+                "metadata": {
+                    "question_length": len(question),
+                    "context_length": len(context),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Question answering error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+    
+    async def summarize_text(self,
+                           text: str,
+                           model_name: str = "bart_cnn",
+                           max_length: int = 150,
+                           min_length: int = 30) -> Dict[str, Any]:
+        """Advanced text summarization"""
+        try:
+            model_info = self.registry.get_model_info("summarization", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown summarization model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            max_allowed = model_info.get("max_length", 1024)
+            max_length = min(max_length, max_allowed)
+            
+            response = hf_client.summarization(
+                text=text,
+                model=model_id,
+                max_length=max_length,
+                min_length=min_length
+            )
+            
+            summary_text = ""
+            if response and len(response) > 0:
+                summary_text = response[0].get("summary_text", "")
+            
+            return {
+                "status": "success",
+                "summary": summary_text,
+                "model_used": model_id,
+                "model_info": model_info,
+                "parameters": {
+                    "max_length": max_length,
+                    "min_length": min_length
+                },
+                "metadata": {
+                    "original_length": len(text.split()),
+                    "summary_length": len(summary_text.split()),
+                    "compression_ratio": len(text.split()) / len(summary_text.split()) if summary_text else 0,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Text summarization error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+
+class AdvancedVisionProcessor:
+    """Advanced computer vision processing"""
+    
+    def __init__(self, model_registry: AIModelRegistry):
+        self.registry = model_registry
+        self.cache = {}
+    
+    async def classify_image(self,
+                           image_data: Union[str, bytes, Image.Image],
+                           model_name: str = "vit_base") -> Dict[str, Any]:
+        """Advanced image classification"""
+        try:
+            model_info = self.registry.get_model_info("image_classification", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown image classification model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            
+            # Process image data
+            if isinstance(image_data, str):
+                # Assume base64 encoded image
+                image_bytes = base64.b64decode(image_data)
+                image = Image.open(io.BytesIO(image_bytes))
+            elif isinstance(image_data, bytes):
+                image = Image.open(io.BytesIO(image_data))
+            else:
+                image = image_data
+            
+            # Resize image if needed
+            target_size = model_info.get("input_size", (224, 224))
+            if image.size != target_size:
+                image = image.resize(target_size)
+            
+            response = hf_client.image_classification(
+                image=image,
+                model=model_id
+            )
+            
+            return {
+                "status": "success",
+                "classifications": response,
+                "model_used": model_id,
+                "model_info": model_info,
+                "top_prediction": response[0] if response else None,
+                "confidence_scores": [item.get("score", 0) for item in response],
+                "metadata": {
+                    "image_size": image.size,
+                    "image_mode": image.mode,
+                    "num_classes": len(response) if response else 0,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Image classification error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+    
+    async def detect_objects(self,
+                           image_data: Union[str, bytes, Image.Image],
+                           model_name: str = "detr") -> Dict[str, Any]:
+        """Advanced object detection"""
+        try:
+            model_info = self.registry.get_model_info("object_detection", model_name)
+            if not model_info:
+                raise ValueError(f"Unknown object detection model: {model_name}")
+            
+            model_id = model_info["model_id"]
+            
+            # Process image data
+            if isinstance(image_data, str):
+                image_bytes = base64.b64decode(image_data)
+                image = Image.open(io.BytesIO(image_bytes))
+            elif isinstance(image_data, bytes):
+                image = Image.open(io.BytesIO(image_data))
+            else:
+                image = image_data
+            
+            response = hf_client.object_detection(
+                image=image,
+                model=model_id
+            )
+            
+            return {
+                "status": "success",
+                "detections": response,
+                "model_used": model_id,
+                "model_info": model_info,
+                "num_objects": len(response) if response else 0,
+                "metadata": {
+                    "image_size": image.size,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Object detection error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model_attempted": model_name
+            }
+
+class AdvancedMultimodalProcessor:
+    """Advanced multimodal AI processing"""
+    
+    def __init__(self, text_processor: AdvancedTextProcessor, vision_processor: AdvancedVisionProcessor):
+        self.text_processor = text_processor
+        self.vision_processor = vision_processor
+    
+    async def process_image_text_pair(self,
+                                    image_data: Union[str, bytes, Image.Image],
+                                    text: str,
+                                    task: str = "image_captioning") -> Dict[str, Any]:
+        """Process image-text pairs for various tasks"""
+        try:
+            results = {}
+            
+            if task == "image_captioning":
+                # Generate caption for image
+                image_result = await self.vision_processor.classify_image(image_data)
+                if image_result["status"] == "success":
+                    # Use top classification as basis for captioning
+                    top_class = image_result["top_prediction"]
+                    caption_prompt = f"Describe an image containing: {top_class['label']}"
+                    caption_result = await self.text_processor.generate_text(
+                        prompt=caption_prompt,
+                        max_tokens=100
+                    )
+                    results["caption"] = caption_result
+                
+                results["image_analysis"] = image_result
+                
+            elif task == "visual_question_answering":
+                # Answer questions about the image
+                image_result = await self.vision_processor.classify_image(image_data)
+                if image_result["status"] == "success":
+                    # Create context from image analysis
+                    classifications = image_result["classifications"]
+                    context = f"Image contains: {', '.join([item['label'] for item in classifications[:3]])}"
+                    
+                    qa_result = await self.text_processor.answer_question(
+                        question=text,
+                        context=context
+                    )
+                    results["answer"] = qa_result
+                
+                results["image_analysis"] = image_result
+            
+            elif task == "image_text_matching":
+                # Determine if text matches image content
+                image_result = await self.vision_processor.classify_image(image_data)
+                if image_result["status"] == "success":
+                    # Analyze text sentiment and compare with image content
+                    text_result = await self.text_processor.classify_text(text)
+                    
+                    # Simple matching logic (can be enhanced)
+                    image_classes = [item['label'].lower() for item in image_result["classifications"]]
+                    text_words = text.lower().split()
+                    
+                    matches = [word for word in text_words if any(word in img_class for img_class in image_classes)]
+                    match_score = len(matches) / len(text_words) if text_words else 0
+                    
+                    results["match_analysis"] = {
+                        "score": match_score,
+                        "matches_found": matches,
+                        "confidence": match_score
+                    }
+                    results["image_analysis"] = image_result
+                    results["text_analysis"] = text_result
+            
+            return {
+                "status": "success",
+                "task": task,
+                "results": results,
+                "metadata": {
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Multimodal processing error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "task_attempted": task
+            }
+
+class OasisAIEngine:
+    """Main OASIS AI Processing Engine"""
+    
+    def __init__(self):
+        self.model_registry = AIModelRegistry()
+        self.text_processor = AdvancedTextProcessor(self.model_registry)
+        self.vision_processor = AdvancedVisionProcessor(self.model_registry)
+        self.multimodal_processor = AdvancedMultimodalProcessor(
+            self.text_processor, 
+            self.vision_processor
+        )
+        
+        self.processing_stats = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "processing_time_total": 0.0
+        }
+        
+        logger.info("OASIS AI Engine initialized with comprehensive capabilities")
+    
+    async def process_request(self,
+                            request_type: str,
+                            **kwargs) -> Dict[str, Any]:
+        """Main processing endpoint for all AI requests"""
+        start_time = datetime.now()
+        self.processing_stats["total_requests"] += 1
+        
+        try:
+            result = None
+            
+            if request_type == "text_generation":
+                result = await self.text_processor.generate_text(**kwargs)
+            elif request_type == "text_classification":
+                result = await self.text_processor.classify_text(**kwargs)
+            elif request_type == "question_answering":
+                result = await self.text_processor.answer_question(**kwargs)
+            elif request_type == "text_summarization":
+                result = await self.text_processor.summarize_text(**kwargs)
+            elif request_type == "image_classification":
+                result = await self.vision_processor.classify_image(**kwargs)
+            elif request_type == "object_detection":
+                result = await self.vision_processor.detect_objects(**kwargs)
+            elif request_type == "multimodal_processing":
+                result = await self.multimodal_processor.process_image_text_pair(**kwargs)
+            else:
+                result = {
+                    "status": "error",
+                    "error": f"Unknown request type: {request_type}"
+                }
+            
+            # Update statistics
+            processing_time = (datetime.now() - start_time).total_seconds()
+            self.processing_stats["processing_time_total"] += processing_time
+            
+            if result and result.get("status") == "success":
+                self.processing_stats["successful_requests"] += 1
+            else:
+                self.processing_stats["failed_requests"] += 1
+            
+            # Add engine metadata
+            if result:
+                result["engine_metadata"] = {
+                    "processing_time_seconds": processing_time,
+                    "engine_version": "3.0.0",
+                    "request_id": str(hash(f"{request_type}_{start_time}")),
+                    "stats": self.processing_stats
+                }
+            
+            return result
+            
+        except Exception as e:
+            self.processing_stats["failed_requests"] += 1
+            logger.error(f"AI Engine processing error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "request_type": request_type,
+                "engine_metadata": {
+                    "processing_time_seconds": (datetime.now() - start_time).total_seconds(),
+                    "engine_version": "3.0.0"
+                }
+            }
+    
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Get comprehensive engine capabilities"""
+        return {
+            "text_capabilities": [
+                "text_generation",
+                "text_classification", 
+                "question_answering",
+                "text_summarization",
+                "sentiment_analysis",
+                "emotion_detection"
+            ],
+            "vision_capabilities": [
+                "image_classification",
+                "object_detection"
+            ],
+            "multimodal_capabilities": [
+                "image_captioning",
+                "visual_question_answering",
+                "image_text_matching"
+            ],
+            "available_models": self.model_registry.models,
+            "statistics": self.processing_stats
+        }
+
+# Global AI Engine instance
+ai_engine = OasisAIEngine()
+
+if __name__ == "__main__":
+    # Test the AI engine
+    async def test_engine():
+        print("Testing OASIS AI Engine...")
+        
+        # Test text generation
+        result = await ai_engine.process_request(
+            "text_generation",
+            prompt="The future of AI is",
+            max_tokens=50
+        )
+        print(f"Text Generation: {result}")
+        
+        # Test text classification
+        result = await ai_engine.process_request(
+            "text_classification",
+            text="I love this new technology!"
+        )
+        print(f"Text Classification: {result}")
+        
+        print("AI Engine capabilities:", ai_engine.get_capabilities())
+    
+    asyncio.run(test_engine())

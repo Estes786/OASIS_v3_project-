@@ -1,0 +1,18 @@
+"{
+  "orchestrator_url": "https://your-orchestrator-space.hf.space",
+  "api_processor_url": "https://your-api-processor-space.hf.space",
+  "ui_interface_url": "https://your-ui-interface-space.hf.space",
+  "timeout": 30,
+  "retry_attempts": 3,
+  "debug_mode": false,
+  "client_settings": {
+    "auto_register": true,
+    "save_session": true,
+    "log_level": "INFO"
+  },
+  "revenue_tracking": {
+    "enabled": true,
+    "currency": "USD",
+    "precision": 2
+  }
+}"

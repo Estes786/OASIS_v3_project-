@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Business Engine
+Revenue Generation & Client Management System
+"""
+
+import os
+import sys
+import json
+import time
+import uuid
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, asdict
+from enum import Enum
+
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
+# Configuration
+sys.path.append(str(Path.home() / "storage" / "shared" / "the_new_civilization" / "config"))
+try:
+    from civilization_config import config
+except ImportError:
+    print("âŒ Configuration not found! Run termux_civilization_setup.sh first.")
+    sys.exit(1)
+
+console = Console()
+
+class ServiceType(Enum):
+    CONTENT_AUTOMATION = "content_automation"
+    API_SERVICES = "api_services"
+    CUSTOM_SOLUTIONS = "custom_solutions"
+
+@dataclass
+class Service:
+    id: str
+    name: str
+    service_type: ServiceType
+    base_price: float
+    description: str
+
+class CivilizationBusinessEngine:
+    def __init__(self):
+        self.console = console
+        self.db_path = config.BASE_DIR / "business" / "business.db"
+        self.db_path.parent.mkdir(exist_ok=True)
+        self._init_database()
+        self._load_default_services()
+        console.print("[green]ðŸ’¼ Business Engine initialized[/green]")
+
+    def _init_database(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS clients (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                created_at TEXT,
+                total_revenue REAL DEFAULT 0.0
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS services (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                service_type TEXT NOT NULL,
+                base_price REAL NOT NULL,
+                description TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS revenue_log (
+                id TEXT PRIMARY KEY,
+                amount REAL NOT NULL,
+                description TEXT,
+                created_at TEXT
+            )
+        """)
+
+        conn.commit()
+        conn.close()
+
+    def _load_default_services(self):
+        services = [
+            Service("svc_001", "Content Generation", ServiceType.CONTENT_AUTOMATION, 100.0, 
+                   "AI-powered content creation"),
+            Service("svc_002", "API Services", ServiceType.API_SERVICES, 0.05, 
+                   "Per-request API processing"),
+            Service("svc_003", "Custom Solutions", ServiceType.CUSTOM_SOLUTIONS, 1500.0, 
+                   "End-to-end AI solutions")
+        ]
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        for service in services:
+            cursor.execute("""
+                INSERT OR REPLACE INTO services 
+                (id, name, service_type, base_price, description)
+                VALUES (?, ?, ?, ?, ?)
+            """, (service.id, service.name, service.service_type.value, 
+                 service.base_price, service.description))
+
+        conn.commit()
+        conn.close()
+
+    def get_revenue_summary(self) -> Dict[str, Any]:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT SUM(amount) FROM revenue_log")
+        total_revenue = cursor.fetchone()[0] or 0.0
+
+        cursor.execute("SELECT COUNT(*) FROM clients")
+        total_clients = cursor.fetchone()[0]
+
+        conn.close()
+
+        return {
+            "total_revenue": total_revenue,
+            "total_clients": total_clients
+        }
+
+    def display_dashboard(self):
+        summary = self.get_revenue_summary()
+
+        revenue_panel = Panel(
+            f"ðŸ’° Total Revenue: ${summary['total_revenue']:.2f}\n"
+            f"ðŸ‘¥ Total Clients: {summary['total_clients']}\n"
+            f"ðŸš€ System Status: Online\n"
+            f"ðŸ“± Mobile Optimized: Yes",
+            title="Business Dashboard",
+            border_style="green"
+        )
+
+        console.print(revenue_panel)
+
+    def list_services(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM services")
+        services = cursor.fetchall()
+        conn.close()
+
+        table = Table(title="ðŸ’¼ Available Services")
+        table.add_column("ID", style="dim")
+        table.add_column("Name", style="cyan")
+        table.add_column("Type", style="blue")
+        table.add_column("Price", style="green")
+
+        for service in services:
+            table.add_row(service[0], service[1], service[2], f"${service[3]:.2f}")
+
+        console.print(table)
+
+def main():
+    engine = CivilizationBusinessEngine()
+
+    console.print(Panel(
+        "ðŸ’¼ [bold magenta]THE NEW CIVILIZATION[/bold magenta] ðŸ’¼\n\n"
+        "ðŸš€ Business Engine Online\n"
+        "ðŸ’° Revenue Tracking Active\n"
+        "ðŸ“Š Analytics Ready",
+        title="Business System",
+        border_style="green"
+    ))
+
+    engine.display_dashboard()
+    engine.list_services()
+
+if __name__ == "__main__":
+    main()

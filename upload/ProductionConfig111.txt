@@ -1,0 +1,35 @@
+"{
+  "quantum_system": {
+    "max_qubits": 20,
+    "simulator_backend": "qasm_simulator",
+    "enable_real_quantum": false,
+    "fallback_to_classical": true,
+    "timeout_seconds": 300
+  },
+  "revenue_system": {
+    "enable_billing": true,
+    "currency": "USD",
+    "tax_rate": 0.1,
+    "payment_gateway": "stripe",
+    "subscription_tiers": [
+      "standard",
+      "professional",
+      "enterprise"
+    ]
+  },
+  "monitoring": {
+    "enable_metrics": true,
+    "log_level": "INFO",
+    "alert_thresholds": {
+      "success_rate_min": 85.0,
+      "avg_execution_time_max": 30.0,
+      "quantum_advantage_rate_min": 30.0
+    }
+  },
+  "termux_integration": {
+    "max_concurrent_clients": 100,
+    "rate_limit_per_minute": 60,
+    "enable_caching": true,
+    "cache_timeout_minutes": 5
+  }
+}"

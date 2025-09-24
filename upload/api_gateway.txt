@@ -1,0 +1,376 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 API Gateway - Ultra-Lightweight RESTful API
+Zero Heavy Dependencies • Pure HTTP Server • Revenue Ready
+
+Simple HTTP API gateway for external integrations with OASIS 2.0 services.
+Provides RESTful endpoints for client applications to access AI services.
+"""
+
+import os
+import sys
+import json
+import time
+import threading
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+import hashlib
+import hmac
+import base64
+
+# Import OASIS components
+try:
+    from business_automation import BusinessAutomation
+    from oasis_core import OASISLogger
+except ImportError:
+    print("❌ Error: OASIS components not found!")
+    print("Please ensure oasis_core.py and business_automation.py are available")
+    sys.exit(1)
+
+class APIAuthentication:
+    """Ultra-lightweight API authentication"""
+
+    def __init__(self, secret_key="your_secret_key_here"):
+        self.secret_key = secret_key.encode('utf-8')
+        self.valid_tokens = {}  # In-memory token storage
+        self.logger = OASISLogger()
+
+    def generate_token(self, client_id, expiry_hours=24):
+        """Generate JWT-like token for client"""
+        timestamp = int(time.time())
+        expiry = timestamp + (expiry_hours * 3600)
+
+        payload = {
+            'client_id': client_id,
+            'issued_at': timestamp,
+            'expires_at': expiry
+        }
+
+        # Simple HMAC-based token
+        payload_str = json.dumps(payload, sort_keys=True)
+        signature = hmac.new(
+            self.secret_key, 
+            payload_str.encode('utf-8'), 
+            hashlib.sha256
+        ).hexdigest()
+
+        token = base64.b64encode(f"{payload_str}.{signature}".encode('utf-8')).decode('utf-8')
+        self.valid_tokens[client_id] = token
+
+        self.logger.info(f"Token generated for client: {client_id}")
+        return token
+
+    def verify_token(self, token, client_id):
+        """Verify client token"""
+        try:
+            decoded = base64.b64decode(token.encode('utf-8')).decode('utf-8')
+            payload_str, signature = decoded.rsplit('.', 1)
+
+            # Verify signature
+            expected_signature = hmac.new(
+                self.secret_key,
+                payload_str.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+
+            if not hmac.compare_digest(signature, expected_signature):
+                return False
+
+            # Check payload
+            payload = json.loads(payload_str)
+
+            if payload['client_id'] != client_id:
+                return False
+
+            if payload['expires_at'] < time.time():
+                return False
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Token verification failed: {e}")
+            return False
+
+class APIRequestHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for OASIS API"""
+
+    def __init__(self, *args, **kwargs):
+        self.business = kwargs.pop('business', None)
+        self.auth = kwargs.pop('auth', None)
+        self.logger = OASISLogger()
+        super().__init__(*args, **kwargs)
+
+    def log_message(self, format, *args):
+        """Override default logging to use OASIS logger"""
+        self.logger.info(format % args)
+
+    def _send_response(self, status_code, data, content_type='application/json'):
+        """Send HTTP response"""
+        self.send_response(status_code)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.end_headers()
+
+        if isinstance(data, dict):
+            response_data = json.dumps(data, indent=2, default=str)
+        else:
+            response_data = str(data)
+
+        self.wfile.write(response_data.encode('utf-8'))
+
+    def _parse_request_data(self):
+        """Parse POST request data"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                post_data = self.rfile.read(content_length)
+                return json.loads(post_data.decode('utf-8'))
+        except Exception as e:
+            self.logger.error(f"Error parsing request data: {e}")
+        return {}
+
+    def _authenticate_request(self):
+        """Authenticate API request"""
+        auth_header = self.headers.get('Authorization')
+        if not auth_header:
+            return None
+
+        try:
+            # Format: "Bearer <token>"
+            token = auth_header.split(' ')[1]
+            # For demo, accept any token that starts with 'demo_'
+            if token.startswith('demo_'):
+                return token.replace('demo_', '')
+            return None
+        except:
+            return None
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests"""
+        self._send_response(200, {'message': 'CORS preflight OK'})
+
+    def do_GET(self):
+        """Handle GET requests"""
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query_params = parse_qs(parsed_path.query)
+
+        # API endpoints
+        if path == '/':
+            # API root - show available endpoints
+            self._send_response(200, {
+                'name': 'OASIS 2.0 API Gateway',
+                'version': '2.0.0',
+                'status': 'running',
+                'endpoints': {
+                    'GET /': 'API information',
+                    'GET /status': 'System status',
+                    'GET /dashboard': 'Business dashboard',
+                    'POST /generate': 'Text generation',
+                    'POST /classify': 'Text classification',
+                    'POST /summarize': 'Text summarization',
+                    'POST /translate': 'Text translation',
+                    'POST /auth/token': 'Get authentication token'
+                },
+                'authentication': 'Required for most endpoints',
+                'documentation': 'https://oasis-api-docs.example.com'
+            })
+
+        elif path == '/status':
+            # System status
+            if not self.business:
+                self._send_response(500, {'error': 'Business automation not available'})
+                return
+
+            try:
+                status = self.business.oasis_core.get_system_status()
+                self._send_response(200, status)
+            except Exception as e:
+                self._send_response(500, {'error': str(e)})
+
+        elif path == '/dashboard':
+            # Business dashboard
+            client_id = self._authenticate_request()
+            if not client_id:
+                self._send_response(401, {'error': 'Authentication required'})
+                return
+
+            if not self.business:
+                self._send_response(500, {'error': 'Business automation not available'})
+                return
+
+            try:
+                dashboard = self.business.get_business_dashboard()
+                self._send_response(200, dashboard)
+            except Exception as e:
+                self._send_response(500, {'error': str(e)})
+
+        else:
+            self._send_response(404, {'error': 'Endpoint not found'})
+
+    def do_POST(self):
+        """Handle POST requests"""
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        request_data = self._parse_request_data()
+
+        if path == '/auth/token':
+            # Generate authentication token
+            client_id = request_data.get('client_id')
+            if not client_id:
+                self._send_response(400, {'error': 'client_id required'})
+                return
+
+            # For demo purposes, generate token for any client_id
+            token = f"demo_{client_id}_{int(time.time())}"
+
+            self._send_response(200, {
+                'token': token,
+                'client_id': client_id,
+                'expires_in': 86400,  # 24 hours
+                'token_type': 'bearer'
+            })
+
+        elif path in ['/generate', '/classify', '/summarize', '/translate']:
+            # AI processing endpoints
+            client_id = self._authenticate_request()
+            if not client_id:
+                self._send_response(401, {'error': 'Authentication required'})
+                return
+
+            if not self.business:
+                self._send_response(500, {'error': 'Business automation not available'})
+                return
+
+            # Extract service parameters
+            content = request_data.get('content', '')
+            if not content:
+                self._send_response(400, {'error': 'content parameter required'})
+                return
+
+            # Map endpoint to service type
+            service_type_map = {
+                '/generate': 'generate',
+                '/classify': 'classify', 
+                '/summarize': 'summarize',
+                '/translate': 'translate'
+            }
+
+            service_type = service_type_map[path]
+
+            # Additional parameters
+            kwargs = {
+                'service_subtype': request_data.get('service_subtype', 'standard'),
+                'max_length': request_data.get('max_length', 100),
+                'client_tier': request_data.get('client_tier', 'standard')
+            }
+
+            try:
+                # Process request through business automation
+                result = self.business.process_client_request(
+                    client_id,
+                    service_type,
+                    content,
+                    **kwargs
+                )
+
+                if result:
+                    self._send_response(200, result)
+                else:
+                    self._send_response(500, {'error': 'Processing failed'})
+
+            except Exception as e:
+                self._send_response(500, {'error': str(e)})
+
+        else:
+            self._send_response(404, {'error': 'Endpoint not found'})
+
+class OASISAPIGateway:
+    """Main API Gateway server"""
+
+    def __init__(self, host='0.0.0.0', port=8080):
+        self.host = host
+        self.port = port
+        self.logger = OASISLogger()
+
+        # Initialize business automation
+        try:
+            self.business = BusinessAutomation()
+            self.auth = APIAuthentication()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize business components: {e}")
+            self.business = None
+            self.auth = None
+
+        self.logger.info(f"OASIS API Gateway initialized on {host}:{port}")
+
+    def create_handler(self):
+        """Create request handler with dependencies"""
+        class Handler(APIRequestHandler):
+            def __init__(self, *args, **kwargs):
+                self.business = kwargs.pop('business', None)
+                self.auth = kwargs.pop('auth', None) 
+                self.logger = OASISLogger()
+                super().__init__(*args, **kwargs)
+
+        # Return handler class with injected dependencies
+        def handler_factory(*args, **kwargs):
+            return Handler(*args, business=self.business, auth=self.auth, **kwargs)
+
+        return handler_factory
+
+    def start(self):
+        """Start the API gateway server"""
+        try:
+            handler = self.create_handler()
+            self.server = HTTPServer((self.host, self.port), handler)
+
+            self.logger.info(f"🚀 OASIS API Gateway starting on http://{self.host}:{self.port}")
+            self.logger.info("🎯 Endpoints available:")
+            self.logger.info("  GET  /          - API information")
+            self.logger.info("  GET  /status    - System status")  
+            self.logger.info("  GET  /dashboard - Business dashboard")
+            self.logger.info("  POST /generate  - Text generation")
+            self.logger.info("  POST /classify  - Text classification")
+            self.logger.info("  POST /summarize - Text summarization")
+            self.logger.info("  POST /translate - Text translation")
+            self.logger.info("  POST /auth/token - Authentication")
+
+            print(f"\n🌐 API Gateway running at: http://{self.host}:{self.port}")
+            print("💰 Ready for client requests and revenue generation!")
+            print("Press Ctrl+C to stop")
+
+            self.server.serve_forever()
+
+        except KeyboardInterrupt:
+            self.logger.info("API Gateway shutting down...")
+            if hasattr(self, 'server'):
+                self.server.server_close()
+        except Exception as e:
+            self.logger.error(f"Failed to start API Gateway: {e}")
+            sys.exit(1)
+
+def main():
+    """Main entry point"""
+    print("🌐 OASIS 2.0 API GATEWAY")
+    print("Ultra-Lightweight RESTful API • Zero Heavy Dependencies")
+    print("=" * 60)
+
+    # Configuration
+    host = os.getenv('API_HOST', '0.0.0.0')
+    port = int(os.getenv('API_PORT', 8080))
+
+    try:
+        # Initialize and start API gateway
+        gateway = OASISAPIGateway(host, port)
+        gateway.start()
+
+    except Exception as e:
+        print(f"❌ Error starting API Gateway: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - AI Model Trainer
+Comprehensive AI/ML model training and fine-tuning pipeline
+
+This script provides a complete solution for training, fine-tuning, and optimizing
+AI models using the Hugging Face ecosystem with mobile-first optimization.
+"""
+
+import os
+import sys
+import json
+import time
+import logging
+import torch
+import numpy as np
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Union, Tuple
+from dataclasses import dataclass, asdict
+from enum import Enum
+
+import datasets
+from datasets import Dataset, DatasetDict, load_dataset
+from transformers import (
+    AutoTokenizer, AutoModel, AutoModelForSequenceClassification,
+    AutoModelForCausalLM, TrainingArguments, Trainer, pipeline,
+    EarlyStoppingCallback, get_linear_schedule_with_warmup
+)
+from transformers.trainer_utils import EvalPrediction
+from huggingface_hub import HfApi, login, create_repo, upload_folder
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, classification_report
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+# Configuration
+sys.path.append(str(Path.home() / "storage" / "shared" / "the_new_civilization" / "config"))
+try:
+    from civilization_config import config
+except ImportError:
+    print("âŒ Configuration not found! Run termux_civilization_setup.sh first.")
+    sys.exit(1)
+
+console = Console()
+
+class TrainingType(Enum):
+    """Available training types"""
+    FINE_TUNING = "fine_tuning"
+    TRANSFER_LEARNING = "transfer_learning"
+    FROM_SCRATCH = "from_scratch"
+    DISTILLATION = "distillation"
+    FEW_SHOT = "few_shot"
+
+class ModelType(Enum):
+    """Supported model types"""
+    TEXT_CLASSIFICATION = "text_classification"
+    TEXT_GENERATION = "text_generation"
+    SEQUENCE_LABELING = "sequence_labeling"
+    SUMMARIZATION = "summarization"
+    TRANSLATION = "translation"
+    QUESTION_ANSWERING = "question_answering"
+
+@dataclass
+class TrainingConfig:
+    """Training configuration"""
+    model_name: str
+    model_type: ModelType
+    training_type: TrainingType
+    dataset_name: Optional[str] = None
+    dataset_path: Optional[str] = None
+    output_dir: str = "trained_model"
+    num_epochs: int = 3
+    batch_size: int = 8
+    learning_rate: float = 2e-5
+    warmup_steps: int = 500
+    weight_decay: float = 0.01
+    max_seq_length: int = 512
+    evaluation_strategy: str = "epoch"
+    save_strategy: str = "epoch"
+    load_best_model_at_end: bool = True
+    metric_for_best_model: str = "eval_loss"
+    greater_is_better: bool = False
+    early_stopping_patience: int = 2
+    fp16: bool = True  # For mobile optimization
+    gradient_checkpointing: bool = True  # Memory optimization
+    dataloader_num_workers: int = 0  # Mobile compatibility
+
+class CivilizationModelTrainer:
+    """Advanced model training system for The New Civilization"""
+
+    def __init__(self):
+        """Initialize the trainer"""
+        self.console = console
+        self.hf_api = HfApi()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.training_history = []
+
+        # Setup logging
+        self._setup_logging()
+
+        # Authenticate with Hugging Face
+        self._authenticate()
+
+        self.logger.info("ðŸš€ AI Model Trainer initialized")
+        self.logger.info(f"ðŸ”§ Device: {self.device}")
+
+    def _setup_logging(self):
+        """Setup logging system"""
+        log_dir = config.LOGS_DIR
+        log_dir.mkdir(exist_ok=True)
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_dir / "trainer.log"),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger("CivilizationTrainer")
+
+    def _authenticate(self):
+        """Authenticate with Hugging Face"""
+        if config.HF_TOKEN:
+            try:
+                login(token=config.HF_TOKEN)
+                self.logger.info("âœ… Authenticated with Hugging Face")
+            except Exception as e:
+                self.logger.error(f"âŒ Authentication failed: {e}")
+        else:
+            self.logger.warning("âš ï¸ No HF_TOKEN found - publishing features disabled")
+
+    def prepare_dataset(self, training_config: TrainingConfig) -> DatasetDict:
+        """Prepare dataset for training"""
+        self.logger.info("ðŸ“Š Preparing dataset...")
+
+        try:
+            # Load dataset
+            if training_config.dataset_name:
+                dataset = load_dataset(training_config.dataset_name)
+                self.logger.info(f"ðŸ“¥ Loaded dataset: {training_config.dataset_name}")
+            elif training_config.dataset_path:
+                # Load from local file
+                if training_config.dataset_path.endswith('.json'):
+                    dataset = Dataset.from_json(training_config.dataset_path)
+                elif training_config.dataset_path.endswith('.csv'):
+                    dataset = Dataset.from_csv(training_config.dataset_path)
+                else:
+                    raise ValueError("Unsupported dataset format")
+
+                # Split if needed
+                if "train" not in dataset:
+                    dataset = dataset.train_test_split(test_size=0.2)
+
+                self.logger.info(f"ðŸ“¥ Loaded local dataset: {training_config.dataset_path}")
+            else:
+                # Create sample dataset for demonstration
+                dataset = self._create_sample_dataset(training_config.model_type)
+                self.logger.info("ðŸ“¥ Created sample dataset")
+
+            return dataset
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to prepare dataset: {e}")
+            raise
+
+    def _create_sample_dataset(self, model_type: ModelType) -> DatasetDict:
+        """Create sample dataset for demonstration"""
+        if model_type == ModelType.TEXT_CLASSIFICATION:
+            data = {
+                "text": [
+                    "I love this product! It's amazing.",
+                    "This is terrible, I hate it.",
+                    "Pretty good, but could be better.",
+                    "Excellent quality and service.",
+                    "Not worth the money.",
+                    "Fantastic experience overall.",
+                    "Disappointing results.",
+                    "Highly recommended!"
+                ],
+                "label": [1, 0, 1, 1, 0, 1, 0, 1]  # 1=positive, 0=negative
+            }
+        elif model_type == ModelType.TEXT_GENERATION:
+            data = {
+                "text": [
+                    "The future of AI is",
+                    "In the world of technology",
+                    "Machine learning enables",
+                    "Artificial intelligence will",
+                    "Deep learning algorithms",
+                    "Neural networks can"
+                ]
+            }
+        else:
+            # Default text classification
+            data = {
+                "text": ["Sample text for training"],
+                "label": [1]
+            }
+
+        dataset = Dataset.from_dict(data)
+        return DatasetDict({
+            "train": dataset.select(range(len(data["text"]) // 2)),
+            "test": dataset.select(range(len(data["text"]) // 2, len(data["text"])))
+        })
+
+    def setup_model_and_tokenizer(self, training_config: TrainingConfig) -> Tuple[Any, Any]:
+        """Setup model and tokenizer"""
+        self.logger.info(f"ðŸ¤– Loading model: {training_config.model_name}")
+
+        try:
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(training_config.model_name)
+
+            # Add pad token if missing
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+
+            # Load model based on type
+            if training_config.model_type == ModelType.TEXT_CLASSIFICATION:
+                model = AutoModelForSequenceClassification.from_pretrained(
+                    training_config.model_name,
+                    num_labels=2  # Binary classification by default
+                )
+            elif training_config.model_type == ModelType.TEXT_GENERATION:
+                model = AutoModelForCausalLM.from_pretrained(training_config.model_name)
+            else:
+                # Default to auto model
+                model = AutoModel.from_pretrained(training_config.model_name)
+
+            # Move to device
+            model.to(self.device)
+
+            self.logger.info(f"âœ… Model and tokenizer loaded successfully")
+            return model, tokenizer
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to load model: {e}")
+            raise
+
+    def preprocess_data(self, dataset: DatasetDict, tokenizer: Any, 
+                       training_config: TrainingConfig) -> DatasetDict:
+        """Preprocess data for training"""
+        self.logger.info("ðŸ”„ Preprocessing data...")
+
+        def tokenize_function(examples):
+            if training_config.model_type == ModelType.TEXT_CLASSIFICATION:
+                # Tokenize text for classification
+                return tokenizer(
+                    examples["text"],
+                    truncation=True,
+                    padding=True,
+                    max_length=training_config.max_seq_length
+                )
+            elif training_config.model_type == ModelType.TEXT_GENERATION:
+                # Tokenize for generation (input = output)
+                tokenized = tokenizer(
+                    examples["text"],
+                    truncation=True,
+                    padding=True,
+                    max_length=training_config.max_seq_length
+                )
+                tokenized["labels"] = tokenized["input_ids"].copy()
+                return tokenized
+            else:
+                # Default tokenization
+                return tokenizer(
+                    examples["text"],
+                    truncation=True,
+                    padding=True,
+                    max_length=training_config.max_seq_length
+                )
+
+        # Apply preprocessing
+        tokenized_dataset = dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=dataset["train"].column_names
+        )
+
+        self.logger.info("âœ… Data preprocessing completed")
+        return tokenized_dataset
+
+    def setup_training_arguments(self, training_config: TrainingConfig) -> TrainingArguments:
+        """Setup training arguments"""
+        output_dir = config.MODELS_DIR / training_config.output_dir
+        output_dir.mkdir(exist_ok=True)
+
+        args = TrainingArguments(
+            output_dir=str(output_dir),
+            num_train_epochs=training_config.num_epochs,
+            per_device_train_batch_size=training_config.batch_size,
+            per_device_eval_batch_size=training_config.batch_size,
+            learning_rate=training_config.learning_rate,
+            warmup_steps=training_config.warmup_steps,
+            weight_decay=training_config.weight_decay,
+            logging_dir=str(config.LOGS_DIR / "tensorboard"),
+            logging_steps=10,
+            evaluation_strategy=training_config.evaluation_strategy,
+            save_strategy=training_config.save_strategy,
+            load_best_model_at_end=training_config.load_best_model_at_end,
+            metric_for_best_model=training_config.metric_for_best_model,
+            greater_is_better=training_config.greater_is_better,
+            fp16=training_config.fp16,
+            gradient_checkpointing=training_config.gradient_checkpointing,
+            dataloader_num_workers=training_config.dataloader_num_workers,
+            save_total_limit=2,  # Limit saved checkpoints for storage
+            report_to=None,  # Disable wandb/tensorboard for mobile
+        )
+
+        return args
+
+    def compute_metrics(self, eval_pred: EvalPrediction) -> Dict[str, float]:
+        """Compute evaluation metrics"""
+        predictions, labels = eval_pred
+
+        if len(predictions.shape) > 1:
+            predictions = np.argmax(predictions, axis=1)
+
+        accuracy = accuracy_score(labels, predictions)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='weighted')
+
+        return {
+            'accuracy': accuracy,
+            'f1': f1,
+            'precision': precision,
+            'recall': recall
+        }
+
+    def train_model(self, training_config: TrainingConfig) -> Dict[str, Any]:
+        """Train the model"""
+        self.logger.info("ðŸŽ¯ Starting model training...")
+
+        training_start = datetime.now()
+
+        try:
+            # Prepare dataset
+            dataset = self.prepare_dataset(training_config)
+
+            # Setup model and tokenizer
+            model, tokenizer = self.setup_model_and_tokenizer(training_config)
+
+            # Preprocess data
+            tokenized_dataset = self.preprocess_data(dataset, tokenizer, training_config)
+
+            # Setup training arguments
+            training_args = self.setup_training_arguments(training_config)
+
+            # Create trainer
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=tokenized_dataset["train"],
+                eval_dataset=tokenized_dataset.get("test"),
+                compute_metrics=self.compute_metrics if training_config.model_type == ModelType.TEXT_CLASSIFICATION else None,
+                callbacks=[EarlyStoppingCallback(early_stopping_patience=training_config.early_stopping_patience)]
+            )
+
+            # Start training
+            self.logger.info("ðŸš€ Training started...")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console
+            ) as progress:
+                task = progress.add_task("Training model...", total=training_config.num_epochs)
+
+                # Train the model
+                training_result = trainer.train()
+
+                progress.update(task, completed=training_config.num_epochs)
+
+            # Save model
+            model_path = config.MODELS_DIR / training_config.output_dir / "final"
+            model_path.mkdir(parents=True, exist_ok=True)
+
+            trainer.save_model(str(model_path))
+            tokenizer.save_pretrained(str(model_path))
+
+            training_end = datetime.now()
+            training_duration = training_end - training_start
+
+            # Evaluate model
+            eval_results = trainer.evaluate() if tokenized_dataset.get("test") else {}
+
+            # Prepare results
+            results = {
+                "training_config": asdict(training_config),
+                "training_duration": str(training_duration),
+                "training_loss": training_result.training_loss,
+                "eval_results": eval_results,
+                "model_path": str(model_path),
+                "timestamp": training_end.isoformat()
+            }
+
+            # Save results
+            self._save_training_results(results)
+
+            self.logger.info(f"âœ… Training completed in {training_duration}")
+            self.logger.info(f"ðŸ’¾ Model saved to: {model_path}")
+
+            return results
+
+        except Exception as e:
+            self.logger.error(f"âŒ Training failed: {e}")
+            raise
+
+    def _save_training_results(self, results: Dict[str, Any]):
+        """Save training results"""
+        results_dir = config.LOGS_DIR / "training_results"
+        results_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = results_dir / f"training_{timestamp}.json"
+
+        with open(results_file, "w") as f:
+            json.dump(results, f, indent=2)
+
+        self.training_history.append(results)
+
+    def publish_to_hub(self, model_path: str, repo_name: str, 
+                      description: str = "", private: bool = False) -> str:
+        """Publish trained model to Hugging Face Hub"""
+        try:
+            if not config.HF_TOKEN:
+                raise ValueError("HF_TOKEN required for publishing")
+
+            self.logger.info(f"ðŸ“¤ Publishing model to Hub: {repo_name}")
+
+            # Create repository
+            full_repo_name = f"{config.HF_USERNAME}/{repo_name}"
+
+            try:
+                repo_url = create_repo(
+                    repo_id=full_repo_name,
+                    token=config.HF_TOKEN,
+                    private=private,
+                    exist_ok=True
+                )
+            except Exception as e:
+                self.logger.warning(f"Repository may already exist: {e}")
+                repo_url = f"https://huggingface.co/{full_repo_name}"
+
+            # Upload model
+            upload_folder(
+                folder_path=model_path,
+                repo_id=full_repo_name,
+                token=config.HF_TOKEN,
+                commit_message=f"Upload {repo_name} model"
+            )
+
+            self.logger.info(f"âœ… Model published: {repo_url}")
+            return repo_url
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to publish model: {e}")
+            raise
+
+    def display_training_history(self):
+        """Display training history"""
+        if not self.training_history:
+            console.print("[yellow]No training history available[/yellow]")
+            return
+
+        table = Table(title="ðŸŽ¯ Training History")
+        table.add_column("Model", style="cyan")
+        table.add_column("Type", style="blue")
+        table.add_column("Duration", style="green")
+        table.add_column("Loss", style="yellow")
+        table.add_column("Accuracy", style="magenta")
+
+        for result in self.training_history[-10:]:  # Show last 10
+            config_data = result["training_config"]
+            eval_results = result.get("eval_results", {})
+
+            table.add_row(
+                config_data["model_name"],
+                config_data["model_type"],
+                result["training_duration"],
+                f"{result.get('training_loss', 0):.4f}",
+                f"{eval_results.get('eval_accuracy', 0):.3f}"
+            )
+
+        console.print(table)
+
+    def start_interactive_training(self):
+        """Start interactive training mode"""
+        console.print(Panel(
+            "ðŸŽ¯ [bold magenta]THE NEW CIVILIZATION[/bold magenta]\n"
+            "AI Model Training System\n\n"
+            "Available commands:\n"
+            "â€¢ [cyan]quick[/cyan] - Quick training with sample data\n"
+            "â€¢ [cyan]custom[/cyan] - Custom training configuration\n"
+            "â€¢ [cyan]history[/cyan] - Show training history\n"
+            "â€¢ [cyan]publish[/cyan] - Publish model to Hub\n"
+            "â€¢ [cyan]quit[/cyan] - Exit",
+            title="Training Mode",
+            border_style="green"
+        ))
+
+        while True:
+            try:
+                command = console.input("\n[bold cyan]Enter command:[/bold cyan] ").strip().lower()
+
+                if command == "quit":
+                    break
+                elif command == "history":
+                    self.display_training_history()
+                elif command == "quick":
+                    self._handle_quick_training()
+                elif command == "custom":
+                    self._handle_custom_training()
+                elif command == "publish":
+                    self._handle_model_publishing()
+                else:
+                    console.print("[red]Unknown command. Type 'quit' to exit.[/red]")
+
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Interrupted by user[/yellow]")
+                break
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+
+    def _handle_quick_training(self):
+        """Handle quick training"""
+        config_obj = TrainingConfig(
+            model_name="distilbert-base-uncased",
+            model_type=ModelType.TEXT_CLASSIFICATION,
+            training_type=TrainingType.FINE_TUNING,
+            num_epochs=1,
+            batch_size=4
+        )
+
+        console.print("[yellow]Starting quick training with sample data...[/yellow]")
+        results = self.train_model(config_obj)
+        console.print(f"[green]Quick training completed! Model saved to: {results['model_path']}[/green]")
+
+    def _handle_custom_training(self):
+        """Handle custom training configuration"""
+        console.print("[cyan]Custom training not implemented in demo. Use quick training.[/cyan]")
+
+    def _handle_model_publishing(self):
+        """Handle model publishing"""
+        console.print("[cyan]Model publishing requires trained model. Train a model first.[/cyan]")
+
+def main():
+    """Main entry point"""
+    trainer = CivilizationModelTrainer()
+
+    # Show welcome message
+    console.print(Panel(
+        "ðŸŽ¯ [bold magenta]THE NEW CIVILIZATION[/bold magenta] ðŸŽ¯\n\n"
+        "ðŸ§  AI Model Training System Online\n"
+        "ðŸš€ Mobile-Optimized Training Pipeline\n"
+        "ðŸ“± Lightweight & Efficient Processing\n"
+        "ðŸ¤– Hugging Face Integration Active",
+        title="AI Trainer Initialized",
+        border_style="green"
+    ))
+
+    # Start interactive training
+    trainer.start_interactive_training()
+
+    console.print("\n[green]Thank you for using The New Civilization AI Trainer! ðŸŽ¯[/green]")
+
+if __name__ == "__main__":
+    main()

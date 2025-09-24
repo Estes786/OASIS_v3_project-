@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Main Launcher
+Ultra-lightweight AI system launcher
+"""
+
+import os
+import sys
+from pathlib import Path
+
+def show_banner():
+    """Display OASIS banner"""
+    print("=" * 60)
+    print("🌟 OASIS 2.0 - ULTRA-LIGHTWEIGHT AI SYSTEM 🌟")
+    print("Pure API-First Architecture | Zero Heavy Dependencies")
+    print("=" * 60)
+    print("📊 System Stats:")
+    print("• Total footprint: <5MB")
+    print("• Dependencies: 4 minimal packages only")
+    print("• Heavy libraries: ZERO")
+    print("• Architecture: 100% API-first")
+    print("=" * 60)
+
+def check_environment():
+    """Check if environment is properly configured"""
+    config_file = Path("config/.env")
+    
+    if not config_file.exists():
+        print("⚠️ Configuration file not found!")
+        print("Please edit config/.env with your Hugging Face token")
+        return False
+    
+    # Check if HF_TOKEN is set
+    hf_token = os.getenv("HF_TOKEN", "").strip()
+    if not hf_token or hf_token == "your_hugging_face_token_here":
+        print("⚠️ HF_TOKEN not configured!")
+        print("Please set your Hugging Face token in config/.env")
+        return False
+    
+    print("✅ Environment configuration OK")
+    return True
+
+def main():
+    """Main launcher"""
+    show_banner()
+    
+    print("\n🔍 Checking environment...")
+    env_ok = check_environment()
+    
+    print("\n🚀 Available OASIS modules:")
+    print("1. API Orchestrator - AI processing via Hugging Face APIs")
+    print("2. Business Engine - Revenue tracking and client management")
+    print("3. Interactive Demo - Test all features")
+    
+    if not env_ok:
+        print("\n❌ Environment not ready. Please configure first.")
+        return
+    
+    print("\n🎮 Choose an option:")
+    print("1 - Launch API Orchestrator (Interactive)")
+    print("2 - Launch Business Engine (Interactive)")
+    print("3 - Run Demo Mode")
+    print("q - Quit")
+    
+    try:
+        choice = input("\n🚀 Your choice: ").strip().lower()
+        
+        if choice == "1":
+            print("\n🚀 Launching API Orchestrator...")
+            from scripts.oasis_api_orchestrator import main as orchestrator_main
+            sys.argv = [sys.argv[0], "--interactive"]
+            orchestrator_main()
+            
+        elif choice == "2":
+            print("\n💼 Launching Business Engine...")
+            from scripts.simple_business_engine import main as business_main
+            sys.argv = [sys.argv[0], "--interactive"]
+            business_main()
+            
+        elif choice == "3":
+            print("\n🎬 Running Demo Mode...")
+            
+            # Demo API Orchestrator
+            print("\n🤖 Testing API Orchestrator:")
+            from scripts.oasis_api_orchestrator import main as orchestrator_main
+            orchestrator_main()
+            
+            # Demo Business Engine
+            print("\n💼 Testing Business Engine:")
+            from scripts.simple_business_engine import main as business_main
+            business_main()
+            
+        elif choice == "q":
+            print("👋 Goodbye!")
+            
+        else:
+            print("❓ Invalid choice")
+            
+    except KeyboardInterrupt:
+        print("\n👋 Interrupted by user. Goodbye!")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+if __name__ == "__main__":
+    main()

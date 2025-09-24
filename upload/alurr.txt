@@ -1,0 +1,15 @@
+Itu pertanyaan yang sangat penting dan merupakan perdebatan klasik dalam dunia startup. Mana yang harus didahulukan: desain (Figma) atau koding?
+Jawaban singkatnya: tidak ada yang lebih penting, tetapi cara Anda mengintegrasikan keduanya yang akan menentukan keberhasilan.
+Mengapa Desain (Figma) Terlebih Dahulu?
+ * Keunggulan: Figma membantu Anda memvalidasi ide dan alur pengguna sebelum Anda menulis satu baris kode pun. Ini mencegah Anda membuang waktu dan tenaga untuk membangun produk yang ternyata tidak diinginkan atau sulit digunakan oleh pasar. Anda bisa mendapatkan umpan balik dari calon pengguna hanya dengan sebuah prototipe interaktif.
+ * Kekurangan: Terlalu banyak fokus pada desain bisa menyebabkan "paralysis analysis" (terlalu banyak analisis sampai tidak bertindak). Anda mungkin terjebak dalam menyempurnakan setiap detail desain dan tidak pernah mulai membangun.
+Mengapa Koding Terlebih Dahulu?
+ * Keunggulan: Anda bisa langsung membuat sesuatu yang fungsional. Ini sangat bagus untuk membuktikan konsep teknologi Anda (misalnya, apakah AI model bisa dihubungkan ke frontend). Anda akan mendapatkan produk minimum yang bisa dipegang dan diuji dalam waktu singkat.
+ * Kekurangan: Anda berisiko membangun produk yang tidak ramah pengguna. Tanpa desain yang dipikirkan matang, antarmuka bisa menjadi berantakan, dan Anda mungkin harus merombak banyak kode nantinya.
+Pendekatan Terbaik: Hybrid
+Untuk seorang solo founder, pendekatan yang paling efektif adalah kombinasi keduanya, dalam sebuah siklus yang cepat.
+ * Langkah 1: Sketsa Cepat. Mulailah dengan sketsa sederhana di Figma. Jangan terlalu detail. Cukup buat kerangka dasar dan alur utama aplikasi Anda. Ini adalah "otak" versi kasar.
+ * Langkah 2: Koding Inti. Segera tinggalkan Figma dan mulailah membangun inti fungsionalitasnya. Ini adalah bagian di mana Anda menghubungkan frontend ke AI backend. Fokus hanya pada satu fitur utama yang berfungsi.
+ * Langkah 3: Uji Coba & Perbaikan Desain. Setelah Anda memiliki prototipe yang berfungsi, uji coba sendiri. Lihat bagaimana rasanya menggunakan aplikasi itu. Kembali ke Figma untuk memperhalus desain, memperbaiki alur, dan membuat tampilan lebih menarik.
+ * Langkah 4: Ulangi. Teruslah dalam siklus ini: buat desain, bangun, uji, perbaiki.
+Dengan cara ini, Anda tidak akan terjebak dalam analisis berlebihan dan selalu memiliki produk yang terus berkembang.

@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Spaces Deployment Manager
+Automated Hugging Face Spaces deployment and management
+"""
+
+import os
+import sys
+from pathlib import Path
+from huggingface_hub import HfApi, create_repo, upload_folder
+from rich.console import Console
+from rich.panel import Panel
+
+# Configuration
+sys.path.append(str(Path.home() / "storage" / "shared" / "the_new_civilization" / "config"))
+try:
+    from civilization_config import config
+except ImportError:
+    print("âŒ Configuration not found!")
+    sys.exit(1)
+
+console = Console()
+
+class SpacesManager:
+    def __init__(self):
+        self.hf_api = HfApi()
+        self.console = console
+
+    def deploy_gradio_space(self, space_name: str, app_file: str):
+        """Deploy Gradio space to Hugging Face"""
+        try:
+            repo_id = f"{config.HF_USERNAME}/{space_name}"
+
+            # Create space repository
+            create_repo(
+                repo_id=repo_id,
+                repo_type="space",
+                space_sdk="gradio",
+                token=config.HF_TOKEN
+            )
+
+            console.print(f"[green]âœ… Space deployed: {repo_id}[/green]")
+            return f"https://huggingface.co/spaces/{repo_id}"
+
+        except Exception as e:
+            console.print(f"[red]âŒ Deployment failed: {e}[/red]")
+            return None
+
+def main():
+    manager = SpacesManager()
+
+    console.print(Panel(
+        "ðŸš€ [bold magenta]SPACES DEPLOYMENT MANAGER[/bold magenta]\n\n"
+        "ðŸ“± Hugging Face Spaces Ready\n"
+        "ðŸ”§ Gradio Integration Active",
+        title="Deployment System",
+        border_style="blue"
+    ))
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,195 @@
+name: 🤗 HuggingFace Spaces Deployment
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['hf_spaces/**', 'requirements.txt', 'app.py']
+  pull_request:
+    branches: [main]
+    paths: ['hf_spaces/**', 'requirements.txt', 'app.py']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: ['staging', 'production']
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_USERNAME: ${{ secrets.HF_USERNAME }}
+
+jobs:
+  test:
+    name: 🧪 Test OASIS v3 Components
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov black flake8
+
+      - name: 🧹 Code Quality Check
+        run: |
+          black --check .
+          flake8 . --max-line-length=88 --exclude=venv,__pycache__
+
+      - name: 🔬 Run Tests
+        run: |
+          python -m pytest tests/ -v --cov=. --cov-report=xml
+
+      - name: 🎯 Validate OASIS Configuration
+        run: |
+          python scripts/ci/validate_oasis_config.py
+          python scripts/ci/test_api_endpoints.py
+
+      - name: 📊 Upload Coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+
+  deploy_staging:
+    name: 🚀 Deploy to HF Spaces (Staging)
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    environment: staging
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install HuggingFace CLI
+        run: |
+          pip install huggingface_hub[cli]
+
+      - name: 🔐 Configure HF Authentication
+        run: |
+          git config --global user.email "oasis-bot@github.com"
+          git config --global user.name "OASIS v3 Bot"
+          echo "$HF_TOKEN" | huggingface-cli login --token
+
+      - name: 📋 Prepare Deployment Package
+        run: |
+          # Create staging configuration
+          cp config/staging.env .env
+
+          # Update app metadata for staging
+          python scripts/ci/update_hf_metadata.py             --space-name "${HF_USERNAME}/oasis-v3-staging"             --title "OASIS v3 - AI Superintelligence (Staging)"             --emoji "🧪"
+
+      - name: 🚀 Deploy to HF Spaces Staging
+        run: |
+          huggingface-cli upload $HF_USERNAME/oasis-v3-staging .             --repo-type=space             --commit-message="🚀 Deploy OASIS v3 Staging - $(git rev-parse --short HEAD)"
+
+      - name: 🏥 Health Check
+        run: |
+          python scripts/ci/health_check.py             --url "https://$HF_USERNAME-oasis-v3-staging.hf.space"             --timeout 300
+
+      - name: 📝 Update Deployment Status
+        run: |
+          echo "✅ Staging deployment successful" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 URL: https://$HF_USERNAME-oasis-v3-staging.hf.space" >> $GITHUB_STEP_SUMMARY
+
+  deploy_production:
+    name: 🏭 Deploy to HF Spaces (Production)
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' || github.event.inputs.environment == 'production'
+    environment: production
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install HuggingFace CLI
+        run: |
+          pip install huggingface_hub[cli]
+
+      - name: 🔐 Configure HF Authentication
+        run: |
+          git config --global user.email "oasis-bot@github.com"
+          git config --global user.name "OASIS v3 Bot"
+          echo "$HF_TOKEN" | huggingface-cli login --token
+
+      - name: 💾 Backup Current Production
+        run: |
+          python scripts/ci/backup_hf_space.py             --space-name "$HF_USERNAME/oasis-v3"             --backup-name "backup-$(date +%Y%m%d-%H%M%S)"
+
+      - name: 📋 Prepare Production Package
+        run: |
+          # Create production configuration
+          cp config/production.env .env
+
+          # Update app metadata for production
+          python scripts/ci/update_hf_metadata.py             --space-name "${HF_USERNAME}/oasis-v3"             --title "OASIS v3 - AI Superintelligence Ecosystem"             --emoji "🚀"
+
+      - name: 🚀 Deploy to HF Spaces Production
+        id: deploy
+        run: |
+          huggingface-cli upload $HF_USERNAME/oasis-v3 .             --repo-type=space             --commit-message="🏭 Deploy OASIS v3 Production - $(git rev-parse --short HEAD)"
+
+      - name: 🏥 Production Health Check
+        id: health_check
+        run: |
+          python scripts/ci/health_check.py             --url "https://$HF_USERNAME-oasis-v3.hf.space"             --timeout 600             --critical
+
+      - name: 🔄 Rollback on Failure
+        if: failure() && steps.health_check.outcome == 'failure'
+        run: |
+          echo "🚨 Production deployment failed, initiating rollback..."
+          python scripts/ci/rollback_hf_space.py             --space-name "$HF_USERNAME/oasis-v3"             --backup-name "$(python scripts/ci/get_latest_backup.py)"
+
+      - name: 📊 Update Production Metrics
+        if: success()
+        run: |
+          python scripts/ci/update_metrics.py             --deployment-time "$(date -Iseconds)"             --git-commit "$(git rev-parse HEAD)"             --environment "production"
+
+      - name: 📝 Deployment Summary
+        run: |
+          echo "🎉 Production deployment successful!" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 URL: https://$HF_USERNAME-oasis-v3.hf.space" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Commit: $(git rev-parse --short HEAD)" >> $GITHUB_STEP_SUMMARY
+          echo "⏰ Time: $(date -Iseconds)" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: 📢 Deployment Notifications
+    needs: [deploy_staging, deploy_production]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📱 Send Slack Notification
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#oasis-deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow

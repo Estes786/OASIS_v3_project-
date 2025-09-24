@@ -1,0 +1,86 @@
+# FMAA BDI Agent - Cloud Deployment Blueprint
+# Kubernetes/Docker configuration for scalable cloud deployment
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fmaa-bdi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fmaa-belief-manager
+  namespace: fmaa-bdi
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fmaa-belief-manager
+  template:
+    metadata:
+      labels:
+        app: fmaa-belief-manager
+    spec:
+      containers:
+      - name: belief-manager
+        image: fmaa/belief-manager:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fmaa-desire-engine
+  namespace: fmaa-bdi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fmaa-desire-engine
+  template:
+    metadata:
+      labels:
+        app: fmaa-desire-engine
+    spec:
+      containers:
+      - name: desire-engine
+        image: fmaa/desire-engine:latest
+        ports:
+        - containerPort: 8081
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: QUANTUM_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "768Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fmaa-bdi-service
+  namespace: fmaa-bdi
+spec:
+  selector:
+    app: fmaa-belief-manager
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: LoadBalancer

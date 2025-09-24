@@ -1,0 +1,14 @@
+"# OASIS v3 - Termux Requirements (Ultra-Minimal)
+# ZERO external dependencies - Python stdlib only!
+
+# All functionality uses Python standard library:
+# - urllib.request (HTTP client)
+# - json (JSON processing) 
+# - datetime (timestamps)
+# - threading (background tasks)
+# - uuid (unique identifiers)
+# - hashlib (security/hashing)
+# - gzip (compression)
+
+# Total footprint: <5MB (Python interpreter + scripts)
+# NO pip packages required!"

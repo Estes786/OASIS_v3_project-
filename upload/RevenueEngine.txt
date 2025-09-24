@@ -1,0 +1,295 @@
+""""
+OASIS v3 Revenue Engine
+Ultra-lightweight business intelligence with automated pricing and revenue optimization.
+"""
+
+import json
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, asdict
+
+@dataclass
+class PricingTier:
+    """Pricing tier configuration"""
+    name: str
+    base_price: float
+    requests_limit: int
+    features: List[str]
+    overage_rate: float
+
+@dataclass
+class ClientProfile:
+    """Client profile with usage and billing data"""
+    client_id: str
+    tier: str
+    total_spent: float
+    requests_count: int
+    last_activity: str
+    satisfaction_score: float
+    churn_risk: str
+
+@dataclass
+class RevenueMetrics:
+    """Revenue metrics for analytics"""
+    total_revenue: float
+    monthly_revenue: float
+    avg_transaction: float
+    client_count: int
+    growth_rate: float
+
+class OasisRevenueEngine:
+    """
+    Automated revenue optimization and pricing engine.
+    Zero dependencies, pure Python implementation.
+    """
+
+    def __init__(self):
+        self.pricing_tiers = {
+            "starter": PricingTier(
+                name="Starter",
+                base_price=5.0,
+                requests_limit=100,
+                features=["Basic API", "Email Support"],
+                overage_rate=0.10
+            ),
+            "professional": PricingTier(
+                name="Professional", 
+                base_price=25.0,
+                requests_limit=1000,
+                features=["Advanced API", "Priority Support", "Analytics"],
+                overage_rate=0.05
+            ),
+            "enterprise": PricingTier(
+                name="Enterprise",
+                base_price=120.0,
+                requests_limit=10000,
+                features=["Full API", "24/7 Support", "Custom Models", "SLA"],
+                overage_rate=0.02
+            )
+        }
+
+        # Mock client database
+        self.clients = self._generate_mock_clients()
+
+    def _generate_mock_clients(self) -> Dict[str, ClientProfile]:
+        """Generate mock client data for demonstration"""
+        return {
+            "startup_001": ClientProfile(
+                client_id="startup_001",
+                tier="starter", 
+                total_spent=45.0,
+                requests_count=890,
+                last_activity="2024-01-15",
+                satisfaction_score=4.2,
+                churn_risk="low"
+            ),
+            "corp_002": ClientProfile(
+                client_id="corp_002",
+                tier="enterprise",
+                total_spent=2400.0,
+                requests_count=45000,
+                last_activity="2024-01-15",
+                satisfaction_score=4.8,
+                churn_risk="low"
+            ),
+            "agency_003": ClientProfile(
+                client_id="agency_003",
+                tier="professional",
+                total_spent=340.0,
+                requests_count=12000,
+                last_activity="2024-01-10",
+                satisfaction_score=3.9,
+                churn_risk="medium"
+            )
+        }
+
+    def calculate_usage_cost(self, tier: str, requests: int) -> Tuple[float, Dict]:
+        """Calculate cost based on usage and tier"""
+        if tier not in self.pricing_tiers:
+            return 0.0, {"error": "Invalid tier"}
+
+        pricing = self.pricing_tiers[tier]
+        base_cost = pricing.base_price
+
+        # Calculate overage
+        if requests > pricing.requests_limit:
+            overage = requests - pricing.requests_limit
+            overage_cost = overage * pricing.overage_rate
+        else:
+            overage_cost = 0.0
+
+        total_cost = base_cost + overage_cost
+
+        return total_cost, {
+            "base_cost": base_cost,
+            "overage_cost": overage_cost,
+            "total_cost": total_cost,
+            "requests": requests,
+            "limit": pricing.requests_limit,
+            "tier": tier
+        }
+
+    def get_pricing_recommendation(self, monthly_requests: int) -> Dict:
+        """Recommend optimal pricing tier based on usage"""
+        recommendations = []
+
+        for tier_name, tier in self.pricing_tiers.items():
+            cost, breakdown = self.calculate_usage_cost(tier_name, monthly_requests)
+
+            recommendations.append({
+                "tier": tier_name,
+                "cost": cost,
+                "cost_per_request": cost / max(monthly_requests, 1),
+                "features": tier.features,
+                "recommended": False
+            })
+
+        # Sort by cost and mark the most economical as recommended
+        recommendations.sort(key=lambda x: x["cost"])
+        if recommendations:
+            recommendations[0]["recommended"] = True
+
+        return {
+            "monthly_requests": monthly_requests,
+            "recommendations": recommendations,
+            "savings_vs_highest": recommendations[-1]["cost"] - recommendations[0]["cost"] if len(recommendations) > 1 else 0
+        }
+
+    def calculate_revenue_metrics(self) -> RevenueMetrics:
+        """Calculate comprehensive revenue metrics"""
+        total_revenue = sum(client.total_spent for client in self.clients.values())
+        client_count = len(self.clients)
+        avg_transaction = total_revenue / client_count if client_count > 0 else 0
+
+        # Mock monthly revenue (assume 30% of total is monthly)
+        monthly_revenue = total_revenue * 0.3
+
+        # Mock growth rate (assume 15% monthly growth)
+        growth_rate = 15.0
+
+        return RevenueMetrics(
+            total_revenue=total_revenue,
+            monthly_revenue=monthly_revenue,
+            avg_transaction=avg_transaction,
+            client_count=client_count,
+            growth_rate=growth_rate
+        )
+
+    def analyze_churn_risk(self) -> Dict:
+        """Analyze client churn risk and recommend actions"""
+        churn_analysis = {
+            "high_risk": [],
+            "medium_risk": [],
+            "low_risk": [],
+            "recommendations": []
+        }
+
+        for client in self.clients.values():
+            # Analyze churn indicators
+            last_activity = datetime.strptime(client.last_activity, "%Y-%m-%d")
+            days_inactive = (datetime.now() - last_activity).days
+
+            risk_factors = []
+            if days_inactive > 7:
+                risk_factors.append("Inactive for {} days".format(days_inactive))
+            if client.satisfaction_score < 4.0:
+                risk_factors.append("Low satisfaction: {:.1f}/5.0".format(client.satisfaction_score))
+            if client.requests_count == 0:
+                risk_factors.append("No API usage")
+
+            analysis = {
+                "client_id": client.client_id,
+                "tier": client.tier,
+                "total_spent": client.total_spent,
+                "risk_factors": risk_factors,
+                "satisfaction": client.satisfaction_score
+            }
+
+            if len(risk_factors) >= 2 or client.churn_risk == "high":
+                churn_analysis["high_risk"].append(analysis)
+            elif len(risk_factors) == 1 or client.churn_risk == "medium":
+                churn_analysis["medium_risk"].append(analysis)
+            else:
+                churn_analysis["low_risk"].append(analysis)
+
+        # Generate recommendations
+        if churn_analysis["high_risk"]:
+            churn_analysis["recommendations"].append(
+                "Immediate outreach needed for {} high-risk clients".format(len(churn_analysis["high_risk"]))
+            )
+        if churn_analysis["medium_risk"]:
+            churn_analysis["recommendations"].append(
+                "Monitor {} medium-risk clients closely".format(len(churn_analysis["medium_risk"]))
+            )
+
+        return churn_analysis
+
+    def generate_upsell_opportunities(self) -> List[Dict]:
+        """Identify upselling opportunities"""
+        opportunities = []
+
+        for client in self.clients.values():
+            current_tier = self.pricing_tiers[client.tier]
+
+            # Check if client is near usage limits
+            usage_ratio = client.requests_count / current_tier.requests_limit
+
+            if usage_ratio > 0.8:  # Using 80%+ of allocation
+                # Find next tier up
+                tier_names = list(self.pricing_tiers.keys())
+                current_index = tier_names.index(client.tier)
+
+                if current_index < len(tier_names) - 1:
+                    next_tier_name = tier_names[current_index + 1]
+                    next_tier = self.pricing_tiers[next_tier_name]
+
+                    # Calculate potential savings
+                    current_cost, _ = self.calculate_usage_cost(client.tier, client.requests_count)
+                    next_tier_cost, _ = self.calculate_usage_cost(next_tier_name, client.requests_count)
+
+                    if next_tier_cost < current_cost:
+                        savings = current_cost - next_tier_cost
+                        opportunities.append({
+                            "client_id": client.client_id,
+                            "current_tier": client.tier,
+                            "recommended_tier": next_tier_name,
+                            "monthly_savings": round(savings, 2),
+                            "usage_ratio": round(usage_ratio * 100, 1),
+                            "priority": "high" if usage_ratio > 0.9 else "medium"
+                        })
+
+        return sorted(opportunities, key=lambda x: x["monthly_savings"], reverse=True)
+
+    def export_business_report(self) -> Dict:
+        """Generate comprehensive business report"""
+        metrics = self.calculate_revenue_metrics()
+        churn_analysis = self.analyze_churn_risk()
+        upsell_ops = self.generate_upsell_opportunities()
+
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "revenue_metrics": asdict(metrics),
+            "churn_analysis": churn_analysis,
+            "upsell_opportunities": upsell_ops,
+            "total_clients": len(self.clients),
+            "revenue_forecast": {
+                "next_month": metrics.monthly_revenue * (1 + metrics.growth_rate / 100),
+                "next_quarter": metrics.monthly_revenue * 3 * (1 + metrics.growth_rate / 100),
+                "confidence": 85
+            }
+        }
+
+# Usage example
+if __name__ == "__main__":
+    engine = OasisRevenueEngine()
+
+    # Test pricing calculation
+    cost, breakdown = engine.calculate_usage_cost("professional", 1500)
+    print(f"Professional tier (1500 requests): ${cost:.2f}")
+    print(f"Breakdown: {breakdown}")
+
+    # Test recommendations
+    recommendations = engine.get_pricing_recommendation(750)
+    print(f"\nRecommendations for 750 monthly requests:")
+    for rec in recommendations["recommendations"]:
+        print(f"- {rec['tier']}: ${rec['cost']:.2f} ({'âœ“ Recommended' if rec['recommended'] else ''})")"

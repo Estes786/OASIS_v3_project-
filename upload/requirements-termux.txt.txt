@@ -1,0 +1,41 @@
+"# FMAA BDI Agent - Termux Requirements
+# Optimized untuk Android Command Center dengan resource terbatas
+
+# Essential Core (Always Install)
+requests>=2.31.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+psutil>=5.9.0
+asyncio-mqtt>=0.13.0
+
+# Lightweight Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+starlette>=0.27.0
+
+# Data Processing (Lightweight)
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Monitoring & Logging
+rich>=13.6.0
+loguru>=0.7.2
+
+# BDI Core Dependencies
+pydantic>=2.4.0
+networkx>=3.2.1
+schedule>=1.2.0
+
+# Optional: Lightweight ML (commented for minimal install)
+# scikit-learn>=1.3.0
+# joblib>=1.3.2
+
+# Development Tools (lightweight)
+jupyter>=1.0.0
+notebook>=7.0.0
+ipykernel>=6.26.0
+
+# Optional Cloud SDKs (install only if needed)
+# google-cloud-storage>=2.10.0
+# boto3>=1.29.0
+# supabase>=2.0.0"

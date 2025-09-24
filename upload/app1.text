@@ -1,0 +1,740 @@
+#!/usr/bin/env python3
+"""
+OASIS v3 - Open Source AI Superintelligence Ecosystem
+Hugging Face Spaces Application
+
+Revolutionary ultra-lightweight AI platform with Termux orchestration capabilities.
+This application serves as the AI processing powerhouse while being controlled
+by an ultra-lightweight Termux command center.
+
+Author: OASIS Team
+Version: 3.0.0
+License: MIT
+"""
+
+import os
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any, Union
+import uuid
+
+# Core libraries
+import gradio as gr
+import requests
+from huggingface_hub import InferenceClient
+import numpy as np
+
+# FastAPI for robust API backend
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
+import uvicorn
+
+# Async HTTP client
+import httpx
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Environment configuration
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+OASIS_API_KEY = os.getenv("OASIS_API_KEY", "oasis_v3_default_key")
+BUSINESS_MODE = os.getenv("BUSINESS_MODE", "true").lower() == "true"
+
+# Initialize Hugging Face client
+if HF_TOKEN:
+    hf_client = InferenceClient(token=HF_TOKEN)
+else:
+    hf_client = InferenceClient()
+
+# FastAPI app initialization
+app = FastAPI(
+    title="OASIS v3 AI Processing Engine",
+    description="Revolutionary AI Superintelligence Ecosystem - Hugging Face Spaces Backend",
+    version="3.0.0"
+)
+
+# CORS middleware for cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security
+security = HTTPBearer()
+
+class OasisCore:
+    """Core OASIS v3 AI Processing Engine"""
+    
+    def __init__(self):
+        self.session_id = str(uuid.uuid4())
+        self.active_tasks = {}
+        self.business_metrics = {
+            "total_requests": 0,
+            "successful_operations": 0,
+            "revenue_generated": 0.0,
+            "active_sessions": 0
+        }
+        logger.info(f"OASIS v3 Core initialized with session: {self.session_id}")
+    
+    async def process_text_generation(self, 
+                                    prompt: str, 
+                                    model: str = "microsoft/DialoGPT-large",
+                                    max_tokens: int = 512,
+                                    temperature: float = 0.7) -> Dict[str, Any]:
+        """Advanced text generation with multiple model support"""
+        try:
+            self.business_metrics["total_requests"] += 1
+            
+            # Use Hugging Face Inference API
+            response = hf_client.text_generation(
+                prompt=prompt,
+                model=model,
+                max_new_tokens=max_tokens,
+                temperature=temperature,
+                return_full_text=False
+            )
+            
+            result = {
+                "status": "success",
+                "generated_text": response,
+                "model_used": model,
+                "tokens_generated": len(response.split()) if isinstance(response, str) else 0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id
+            }
+            
+            self.business_metrics["successful_operations"] += 1
+            if BUSINESS_MODE:
+                self.business_metrics["revenue_generated"] += 0.01  # $0.01 per request
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Text generation error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def process_image_classification(self, 
+                                         image_data: str,
+                                         model: str = "google/vit-base-patch16-224") -> Dict[str, Any]:
+        """Advanced image classification processing"""
+        try:
+            self.business_metrics["total_requests"] += 1
+            
+            # Process image with Hugging Face Vision models
+            response = hf_client.image_classification(
+                image=image_data,
+                model=model
+            )
+            
+            result = {
+                "status": "success",
+                "classifications": response,
+                "model_used": model,
+                "confidence_scores": [item.get('score', 0) for item in response],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id
+            }
+            
+            self.business_metrics["successful_operations"] += 1
+            if BUSINESS_MODE:
+                self.business_metrics["revenue_generated"] += 0.05  # $0.05 per image
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Image classification error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def process_sentiment_analysis(self, 
+                                       text: str,
+                                       model: str = "cardiffnlp/twitter-roberta-base-sentiment-latest") -> Dict[str, Any]:
+        """Advanced sentiment analysis with emotion detection"""
+        try:
+            self.business_metrics["total_requests"] += 1
+            
+            response = hf_client.text_classification(
+                text=text,
+                model=model
+            )
+            
+            result = {
+                "status": "success",
+                "sentiment_analysis": response,
+                "model_used": model,
+                "dominant_emotion": max(response, key=lambda x: x['score']) if response else None,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id
+            }
+            
+            self.business_metrics["successful_operations"] += 1
+            if BUSINESS_MODE:
+                self.business_metrics["revenue_generated"] += 0.02
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Sentiment analysis error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def process_question_answering(self,
+                                       question: str,
+                                       context: str,
+                                       model: str = "deepset/roberta-base-squad2") -> Dict[str, Any]:
+        """Advanced question answering system"""
+        try:
+            self.business_metrics["total_requests"] += 1
+            
+            response = hf_client.question_answering(
+                question=question,
+                context=context,
+                model=model
+            )
+            
+            result = {
+                "status": "success",
+                "answer": response,
+                "model_used": model,
+                "confidence": response.get('score', 0) if isinstance(response, dict) else 0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id
+            }
+            
+            self.business_metrics["successful_operations"] += 1
+            if BUSINESS_MODE:
+                self.business_metrics["revenue_generated"] += 0.03
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Question answering error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def process_text_summarization(self,
+                                       text: str,
+                                       model: str = "facebook/bart-large-cnn",
+                                       max_length: int = 150) -> Dict[str, Any]:
+        """Advanced text summarization"""
+        try:
+            self.business_metrics["total_requests"] += 1
+            
+            response = hf_client.summarization(
+                text=text,
+                model=model,
+                max_length=max_length
+            )
+            
+            result = {
+                "status": "success",
+                "summary": response,
+                "model_used": model,
+                "original_length": len(text.split()),
+                "summary_length": len(response[0]['summary_text'].split()) if response else 0,
+                "compression_ratio": len(text.split()) / len(response[0]['summary_text'].split()) if response else 0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id
+            }
+            
+            self.business_metrics["successful_operations"] += 1
+            if BUSINESS_MODE:
+                self.business_metrics["revenue_generated"] += 0.04
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Text summarization error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    def get_business_metrics(self) -> Dict[str, Any]:
+        """Get current business metrics and system status"""
+        return {
+            **self.business_metrics,
+            "session_id": self.session_id,
+            "uptime": datetime.now(timezone.utc).isoformat(),
+            "active_tasks": len(self.active_tasks),
+            "system_status": "operational"
+        }
+
+# Initialize OASIS Core
+oasis_core = OasisCore()
+
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify API key for secure access"""
+    if credentials.credentials != OASIS_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return credentials.credentials
+
+# API Endpoints for Termux Orchestration
+
+@app.post("/api/v3/text/generate")
+async def generate_text(request: Dict[str, Any], api_key: str = Depends(verify_api_key)):
+    """Generate text using advanced language models"""
+    try:
+        prompt = request.get("prompt", "")
+        model = request.get("model", "microsoft/DialoGPT-large")
+        max_tokens = request.get("max_tokens", 512)
+        temperature = request.get("temperature", 0.7)
+        
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required")
+        
+        result = await oasis_core.process_text_generation(
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Text generation API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v3/image/classify")
+async def classify_image(request: Dict[str, Any], api_key: str = Depends(verify_api_key)):
+    """Classify images using vision models"""
+    try:
+        image_data = request.get("image_data", "")
+        model = request.get("model", "google/vit-base-patch16-224")
+        
+        if not image_data:
+            raise HTTPException(status_code=400, detail="Image data is required")
+        
+        result = await oasis_core.process_image_classification(
+            image_data=image_data,
+            model=model
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Image classification API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v3/text/sentiment")
+async def analyze_sentiment(request: Dict[str, Any], api_key: str = Depends(verify_api_key)):
+    """Analyze sentiment and emotions in text"""
+    try:
+        text = request.get("text", "")
+        model = request.get("model", "cardiffnlp/twitter-roberta-base-sentiment-latest")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        result = await oasis_core.process_sentiment_analysis(
+            text=text,
+            model=model
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Sentiment analysis API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v3/text/qa")
+async def question_answering(request: Dict[str, Any], api_key: str = Depends(verify_api_key)):
+    """Answer questions based on provided context"""
+    try:
+        question = request.get("question", "")
+        context = request.get("context", "")
+        model = request.get("model", "deepset/roberta-base-squad2")
+        
+        if not question or not context:
+            raise HTTPException(status_code=400, detail="Question and context are required")
+        
+        result = await oasis_core.process_question_answering(
+            question=question,
+            context=context,
+            model=model
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Question answering API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v3/text/summarize")
+async def summarize_text(request: Dict[str, Any], api_key: str = Depends(verify_api_key)):
+    """Summarize long text content"""
+    try:
+        text = request.get("text", "")
+        model = request.get("model", "facebook/bart-large-cnn")
+        max_length = request.get("max_length", 150)
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        result = await oasis_core.process_text_summarization(
+            text=text,
+            model=model,
+            max_length=max_length
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Text summarization API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v3/status")
+async def get_system_status(api_key: str = Depends(verify_api_key)):
+    """Get system status and business metrics"""
+    try:
+        metrics = oasis_core.get_business_metrics()
+        return JSONResponse(content={
+            "status": "operational",
+            "version": "3.0.0",
+            "metrics": metrics,
+            "endpoints_available": [
+                "/api/v3/text/generate",
+                "/api/v3/image/classify", 
+                "/api/v3/text/sentiment",
+                "/api/v3/text/qa",
+                "/api/v3/text/summarize"
+            ]
+        })
+        
+    except Exception as e:
+        logger.error(f"Status API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v3/health")
+async def health_check():
+    """Health check endpoint (no auth required)"""
+    return JSONResponse(content={
+        "status": "healthy",
+        "version": "3.0.0",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+# Gradio Interface for Web UI
+def create_gradio_interface():
+    """Create Gradio web interface for OASIS v3"""
+    
+    def generate_text_ui(prompt, model, max_tokens, temperature):
+        """UI wrapper for text generation"""
+        try:
+            result = asyncio.run(oasis_core.process_text_generation(
+                prompt=prompt,
+                model=model, 
+                max_tokens=int(max_tokens),
+                temperature=float(temperature)
+            ))
+            
+            if result["status"] == "success":
+                return result["generated_text"]
+            else:
+                return f"Error: {result.get('error', 'Unknown error')}"
+                
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def analyze_sentiment_ui(text, model):
+        """UI wrapper for sentiment analysis"""
+        try:
+            result = asyncio.run(oasis_core.process_sentiment_analysis(
+                text=text,
+                model=model
+            ))
+            
+            if result["status"] == "success":
+                analysis = result["sentiment_analysis"]
+                if analysis:
+                    return f"Sentiment: {analysis[0].get('label', 'Unknown')} (Score: {analysis[0].get('score', 0):.3f})"
+                return "No sentiment detected"
+            else:
+                return f"Error: {result.get('error', 'Unknown error')}"
+                
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def question_answering_ui(question, context, model):
+        """UI wrapper for question answering"""
+        try:
+            result = asyncio.run(oasis_core.process_question_answering(
+                question=question,
+                context=context,
+                model=model
+            ))
+            
+            if result["status"] == "success":
+                answer = result["answer"]
+                if isinstance(answer, dict):
+                    return f"Answer: {answer.get('answer', 'No answer found')} (Confidence: {answer.get('score', 0):.3f})"
+                return str(answer)
+            else:
+                return f"Error: {result.get('error', 'Unknown error')}"
+                
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def summarize_text_ui(text, model, max_length):
+        """UI wrapper for text summarization"""
+        try:
+            result = asyncio.run(oasis_core.process_text_summarization(
+                text=text,
+                model=model,
+                max_length=int(max_length)
+            ))
+            
+            if result["status"] == "success":
+                summary = result["summary"]
+                if summary and len(summary) > 0:
+                    return summary[0].get('summary_text', 'No summary generated')
+                return "No summary generated"
+            else:
+                return f"Error: {result.get('error', 'Unknown error')}"
+                
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    # Create Gradio interface
+    with gr.Blocks(title="OASIS v3 - AI Superintelligence Ecosystem") as interface:
+        gr.Markdown("""
+        # 🤖 OASIS v3 - AI Superintelligence Ecosystem
+        
+        **Revolutionary Ultra-Lightweight AI Platform**
+        
+        Powered by Hugging Face Spaces | Orchestrated by Termux Command Center
+        
+        ---
+        """)
+        
+        with gr.Tab("🎯 Text Generation"):
+            with gr.Row():
+                with gr.Column():
+                    prompt_input = gr.Textbox(
+                        label="Prompt",
+                        placeholder="Enter your text prompt here...",
+                        lines=3
+                    )
+                    model_select = gr.Dropdown(
+                        choices=[
+                            "microsoft/DialoGPT-large",
+                            "facebook/blenderbot-400M-distill",
+                            "gpt2"
+                        ],
+                        value="microsoft/DialoGPT-large",
+                        label="Model"
+                    )
+                    max_tokens_slider = gr.Slider(
+                        minimum=50,
+                        maximum=1000,
+                        value=512,
+                        step=50,
+                        label="Max Tokens"
+                    )
+                    temperature_slider = gr.Slider(
+                        minimum=0.1,
+                        maximum=1.0,
+                        value=0.7,
+                        step=0.1,
+                        label="Temperature"
+                    )
+                    generate_btn = gr.Button("Generate Text", variant="primary")
+                    
+                with gr.Column():
+                    text_output = gr.Textbox(
+                        label="Generated Text",
+                        lines=10,
+                        interactive=False
+                    )
+            
+            generate_btn.click(
+                fn=generate_text_ui,
+                inputs=[prompt_input, model_select, max_tokens_slider, temperature_slider],
+                outputs=text_output
+            )
+        
+        with gr.Tab("😊 Sentiment Analysis"):
+            with gr.Row():
+                with gr.Column():
+                    sentiment_input = gr.Textbox(
+                        label="Text to Analyze",
+                        placeholder="Enter text for sentiment analysis...",
+                        lines=3
+                    )
+                    sentiment_model = gr.Dropdown(
+                        choices=[
+                            "cardiffnlp/twitter-roberta-base-sentiment-latest",
+                            "nlptown/bert-base-multilingual-uncased-sentiment"
+                        ],
+                        value="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                        label="Model"
+                    )
+                    sentiment_btn = gr.Button("Analyze Sentiment", variant="primary")
+                    
+                with gr.Column():
+                    sentiment_output = gr.Textbox(
+                        label="Sentiment Analysis Result",
+                        lines=5,
+                        interactive=False
+                    )
+            
+            sentiment_btn.click(
+                fn=analyze_sentiment_ui,
+                inputs=[sentiment_input, sentiment_model],
+                outputs=sentiment_output
+            )
+        
+        with gr.Tab("❓ Question Answering"):
+            with gr.Row():
+                with gr.Column():
+                    question_input = gr.Textbox(
+                        label="Question",
+                        placeholder="Ask your question here...",
+                        lines=2
+                    )
+                    context_input = gr.Textbox(
+                        label="Context",
+                        placeholder="Provide context for the question...",
+                        lines=5
+                    )
+                    qa_model = gr.Dropdown(
+                        choices=[
+                            "deepset/roberta-base-squad2",
+                            "distilbert-base-uncased-distilled-squad"
+                        ],
+                        value="deepset/roberta-base-squad2",
+                        label="Model"
+                    )
+                    qa_btn = gr.Button("Answer Question", variant="primary")
+                    
+                with gr.Column():
+                    qa_output = gr.Textbox(
+                        label="Answer",
+                        lines=7,
+                        interactive=False
+                    )
+            
+            qa_btn.click(
+                fn=question_answering_ui,
+                inputs=[question_input, context_input, qa_model],
+                outputs=qa_output
+            )
+        
+        with gr.Tab("📄 Text Summarization"):
+            with gr.Row():
+                with gr.Column():
+                    summary_input = gr.Textbox(
+                        label="Text to Summarize",
+                        placeholder="Enter long text to summarize...",
+                        lines=8
+                    )
+                    summary_model = gr.Dropdown(
+                        choices=[
+                            "facebook/bart-large-cnn",
+                            "t5-small",
+                            "sshleifer/distilbart-cnn-12-6"
+                        ],
+                        value="facebook/bart-large-cnn",
+                        label="Model"
+                    )
+                    summary_length = gr.Slider(
+                        minimum=50,
+                        maximum=500,
+                        value=150,
+                        step=25,
+                        label="Max Summary Length"
+                    )
+                    summary_btn = gr.Button("Summarize", variant="primary")
+                    
+                with gr.Column():
+                    summary_output = gr.Textbox(
+                        label="Summary",
+                        lines=8,
+                        interactive=False
+                    )
+            
+            summary_btn.click(
+                fn=summarize_text_ui,
+                inputs=[summary_input, summary_model, summary_length],
+                outputs=summary_output
+            )
+        
+        with gr.Tab("📊 System Status"):
+            with gr.Column():
+                gr.Markdown("""
+                ### System Information
+                - **Version**: OASIS v3.0.0
+                - **Architecture**: Termux Command Center + HuggingFace Spaces
+                - **API Endpoints**: 6 active endpoints
+                - **Business Mode**: """ + ("Enabled" if BUSINESS_MODE else "Disabled") + """
+                
+                ### Available Models
+                - Text Generation: DialoGPT, BlenderBot, GPT-2
+                - Sentiment Analysis: RoBERTa, BERT Multilingual
+                - Question Answering: RoBERTa SQuAD, DistilBERT
+                - Summarization: BART, T5, DistilBART
+                - Image Classification: Vision Transformer (ViT)
+                """)
+        
+        gr.Markdown("""
+        ---
+        **OASIS v3** - Revolutionizing AI with Ultra-Lightweight Architecture
+        
+        🚀 **Zero Dependencies on Termux** | ☁️ **Full AI Power on Cloud** | 🎯 **Production Ready**
+        """)
+    
+    return interface
+
+# Create and launch Gradio interface
+gradio_app = create_gradio_interface()
+
+if __name__ == "__main__":
+    # Launch both FastAPI and Gradio
+    import threading
+    
+    def run_fastapi():
+        uvicorn.run(app, host="0.0.0.0", port=7860)
+    
+    def run_gradio():
+        gradio_app.launch(
+            server_name="0.0.0.0",
+            server_port=7861,
+            share=True
+        )
+    
+    # Start FastAPI in a separate thread
+    fastapi_thread = threading.Thread(target=run_fastapi)
+    fastapi_thread.start()
+    
+    # Launch Gradio interface
+    gradio_app.launch(
+        server_name="0.0.0.0", 
+        server_port=7860,
+        share=True
+    )

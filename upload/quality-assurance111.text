@@ -1,0 +1,444 @@
+name: 🔍 Quality Assurance & Security
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of scan to run'
+        required: true
+        default: 'full'
+        type: choice
+        options: ['full', 'security', 'performance', 'dependencies']
+
+jobs:
+  code_quality:
+    name: 🧹 Code Quality & Linting
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        component: ['backend', 'frontend', 'termux', 'scripts']
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python (for backend/termux/scripts)
+        if: matrix.component != 'frontend'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Setup Node.js (for frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📋 Install Python Dependencies
+        if: matrix.component != 'frontend'
+        run: |
+          python -m pip install --upgrade pip
+          pip install black flake8 pylint mypy bandit safety isort
+          if [ -f "${{ matrix.component }}/requirements.txt" ]; then
+            pip install -r ${{ matrix.component }}/requirements.txt
+          fi
+
+      - name: 📋 Install Frontend Dependencies
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: 🧹 Python Code Formatting Check
+        if: matrix.component != 'frontend'
+        run: |
+          echo "🔍 Checking code formatting with Black..."
+          black --check --diff ${{ matrix.component }}/
+
+          echo "📏 Checking import sorting..."
+          isort --check-only --diff ${{ matrix.component }}/
+
+      - name: 🧹 Frontend Code Formatting Check  
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          npm run lint
+          npm run format:check
+          npm run type-check
+
+      - name: 🔍 Python Linting
+        if: matrix.component != 'frontend'
+        run: |
+          echo "🔍 Running Flake8..."
+          flake8 ${{ matrix.component }}/ --max-line-length=88 --exclude=venv,__pycache__ --format=github
+
+          echo "🔍 Running Pylint..."
+          pylint ${{ matrix.component }}/ --exit-zero --output-format=github
+
+      - name: 🔍 Type Checking
+        if: matrix.component != 'frontend'
+        run: |
+          echo "🔍 Running MyPy type checking..."
+          mypy ${{ matrix.component }}/ --ignore-missing-imports --show-error-codes
+
+      - name: 📊 Code Quality Metrics
+        if: matrix.component != 'frontend'
+        run: |
+          echo "📊 Calculating code quality metrics..."
+          python scripts/ci/calculate_code_metrics.py             --source-dir ${{ matrix.component }}/             --output-file ${{ matrix.component }}_metrics.json
+
+      - name: 📤 Upload Quality Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: quality-reports-${{ matrix.component }}
+          path: |
+            ${{ matrix.component }}_metrics.json
+            **/*.log
+            **/*.report
+
+  security_scan:
+    name: 🔒 Security Vulnerability Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 🔍 Python Security Scan (Bandit)
+        run: |
+          pip install bandit[toml]
+          bandit -r . -f json -o bandit-report.json
+          bandit -r . -f txt  # Human readable output
+
+      - name: 🔍 Python Dependencies Security (Safety)
+        run: |
+          pip install safety
+          safety check --json --output safety-report.json
+          safety check  # Human readable output
+
+      - name: 🔍 Frontend Security Scan (npm audit)
+        working-directory: ./frontend
+        run: |
+          npm audit --audit-level=moderate --json > ../npm-audit-report.json
+          npm audit  # Human readable output
+
+      - name: 🔍 Secrets Detection (GitLeaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --verbose --no-git
+
+      - name: 🔍 Container Security (if Dockerfile exists)
+        if: hashFiles('**/Dockerfile*') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 🔍 OASIS-Specific Security Checks
+        run: |
+          echo "🔍 Running OASIS-specific security validation..."
+
+          # Check for exposed API keys or tokens
+          python scripts/ci/check_exposed_secrets.py             --source-dirs ".,frontend,termux,scripts"             --patterns-file security/secret_patterns.json
+
+          # Validate Termux ultra-lightweight constraints for security
+          python scripts/ci/validate_termux_security.py             --source-dir termux/             --security-rules security/termux_security_rules.json
+
+      - name: 📊 Security Report Generation
+        run: |
+          python scripts/ci/generate_security_report.py             --bandit-report bandit-report.json             --safety-report safety-report.json             --npm-audit-report npm-audit-report.json             --output-file security_summary.json             --output-format both
+
+      - name: 📤 Upload Security Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            *-report.json
+            security_summary.*
+            trivy-results.sarif
+
+      - name: 🚨 Security Alert on High Vulnerabilities
+        run: |
+          python scripts/ci/check_security_threshold.py             --report-file security_summary.json             --max-high-vulnerabilities 0             --max-critical-vulnerabilities 0
+
+  dependency_analysis:
+    name: 📦 Dependency Analysis & Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Setup Node.js  
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 🔍 Python Dependency Analysis
+        run: |
+          pip install pip-licenses pipdeptree
+
+          # Generate dependency tree
+          pipdeptree --json-tree > python-deps-tree.json
+          pipdeptree  # Human readable
+
+          # Check licenses
+          pip-licenses --format=json --output-file python-licenses.json
+          pip-licenses
+
+      - name: 🔍 Frontend Dependency Analysis
+        working-directory: ./frontend
+        run: |
+          # Generate dependency tree
+          npm list --json > ../frontend-deps.json
+          npm list
+
+          # Check for outdated packages
+          npm outdated --json > ../frontend-outdated.json || true
+
+      - name: ✅ Termux Ultra-Lightweight Validation
+        run: |
+          echo "🔍 Validating Termux ultra-lightweight constraints..."
+
+          # Ensure Termux has ZERO external dependencies
+          python scripts/ci/validate_termux_dependencies.py             --source-dir termux/             --max-dependencies 0             --allowed-stdlib-only             --max-footprint-mb 5
+
+          # Check for forbidden imports in Termux code
+          python scripts/ci/check_forbidden_imports.py             --source-dir termux/             --forbidden "numpy,pandas,torch,tensorflow,sklearn,gradio,matplotlib,scipy"             --strict-mode
+
+      - name: 📊 Generate Dependency Report
+        run: |
+          python scripts/ci/analyze_dependencies.py             --python-deps python-deps-tree.json             --python-licenses python-licenses.json             --frontend-deps frontend-deps.json             --frontend-outdated frontend-outdated.json             --output-file dependency-analysis.json
+
+      - name: 📤 Upload Dependency Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-reports
+          path: |
+            *-deps*.json
+            *-licenses.json
+            dependency-analysis.json
+
+  performance_testing:
+    name: ⚡ Performance & Load Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Performance Testing Tools
+        run: |
+          pip install locust pytest-benchmark memory-profiler
+          npm install -g lighthouse artillery
+
+      - name: ⚡ Termux Orchestrator Performance Test
+        run: |
+          echo "⚡ Testing Termux orchestrator performance..."
+
+          # Memory usage test
+          python -m memory_profiler scripts/ci/test_termux_memory.py
+
+          # Speed benchmarks
+          python -m pytest termux/tests/test_performance.py --benchmark-only             --benchmark-json=termux-benchmark.json
+
+      - name: ⚡ API Performance Testing
+        run: |
+          echo "⚡ Testing API endpoint performance..."
+
+          # Start local test server if available
+          if [ -f "scripts/ci/start_test_server.py" ]; then
+            python scripts/ci/start_test_server.py &
+            sleep 10
+
+            # Run load tests
+            locust --config scripts/ci/locust.conf --headless --users 50 --spawn-rate 5 --run-time 2m
+          fi
+
+      - name: ⚡ Frontend Performance Audit
+        run: |
+          echo "⚡ Running frontend performance tests..."
+
+          # Build frontend for testing
+          cd frontend/
+          npm ci
+          npm run build
+
+          # Start preview server
+          npm run preview &
+          sleep 15
+
+          # Run Lighthouse audit
+          lighthouse http://localhost:4173 --output=json --output-path=../lighthouse-report.json
+          lighthouse http://localhost:4173 --output=html --output-path=../lighthouse-report.html
+
+      - name: 📊 Performance Report
+        run: |
+          python scripts/ci/generate_performance_report.py             --termux-benchmark termux-benchmark.json             --lighthouse-report lighthouse-report.json             --output-file performance-summary.json
+
+      - name: 📤 Upload Performance Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-reports
+          path: |
+            *-benchmark.json
+            lighthouse-report.*
+            performance-summary.json
+
+  integration_testing:
+    name: 🔗 Cross-Platform Integration Testing
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        test_scenario: ['termux-hf-integration', 'frontend-backend-integration', 'end-to-end-workflow']
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 🔗 Run Integration Test: ${{ matrix.test_scenario }}
+        run: |
+          echo "🔗 Running integration test: ${{ matrix.test_scenario }}"
+
+          case "${{ matrix.test_scenario }}" in
+            "termux-hf-integration")
+              python scripts/ci/test_termux_hf_integration.py                 --mock-mode                 --test-all-endpoints
+              ;;
+            "frontend-backend-integration") 
+              python scripts/ci/test_frontend_backend_integration.py                 --build-frontend                 --test-api-calls
+              ;;
+            "end-to-end-workflow")
+              python scripts/ci/test_end_to_end_workflow.py                 --full-workflow                 --include-revenue-tracking
+              ;;
+          esac
+
+      - name: 📤 Upload Integration Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: integration-test-${{ matrix.test_scenario }}
+          path: |
+            test-results-*.json
+            test-logs-*.txt
+
+  compliance_check:
+    name: ✅ Compliance & Standards Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ✅ OASIS Architecture Compliance
+        run: |
+          echo "✅ Validating OASIS v3 architecture compliance..."
+
+          # Validate ultra-lightweight principles
+          python scripts/ci/validate_oasis_compliance.py             --check-termux-constraints             --check-api-first-architecture             --check-revenue-integration             --strict-mode
+
+      - name: ✅ Code Style Compliance
+        run: |
+          echo "✅ Checking code style standards..."
+
+          # Check Python code follows PEP 8
+          flake8 . --exclude=venv,node_modules --max-line-length=88
+
+          # Check documentation standards
+          python scripts/ci/check_documentation_standards.py             --source-dirs ".,termux,scripts"             --min-docstring-coverage 80
+
+      - name: ✅ Security Compliance
+        run: |
+          echo "✅ Checking security compliance..."
+
+          # Ensure no hardcoded secrets
+          python scripts/ci/check_security_compliance.py             --scan-all-files             --check-api-key-patterns             --check-password-patterns
+
+      - name: 📋 Generate Compliance Report
+        run: |
+          python scripts/ci/generate_compliance_report.py             --output-file compliance-report.json             --include-recommendations
+
+      - name: 📤 Upload Compliance Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-report
+          path: compliance-report.json
+
+  summary_report:
+    name: 📋 Quality Assurance Summary
+    needs: [code_quality, security_scan, dependency_analysis, performance_testing, integration_testing, compliance_check]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 💾 Download All Reports
+        uses: actions/download-artifact@v3
+
+      - name: 📊 Generate Comprehensive QA Report
+        run: |
+          python scripts/ci/generate_qa_summary.py             --artifacts-dir .             --output-file qa_summary_report.json             --output-html qa_summary_report.html             --include-trends
+
+      - name: 📝 Update Step Summary
+        run: |
+          echo "## 🔍 Quality Assurance Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          python scripts/ci/format_qa_summary_github.py             --qa-report qa_summary_report.json >> $GITHUB_STEP_SUMMARY
+
+      - name: 📤 Upload Final QA Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: qa-summary-report
+          path: |
+            qa_summary_report.*
+
+      - name: 🚨 Fail on Quality Gate
+        run: |
+          python scripts/ci/check_quality_gate.py             --qa-report qa_summary_report.json             --min-code-quality 85             --max-critical-vulnerabilities 0             --max-high-vulnerabilities 2

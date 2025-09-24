@@ -1,0 +1,70 @@
+"#!/bin/bash
+# OASIS v3 - Termux Setup Script
+# Ultra-lightweight installation for mobile AI orchestration
+
+set -e
+
+echo "ðŸš€ OASIS v3 - Termux Setup"
+echo "=========================="
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if running in Termux
+if [[ -z "$TERMUX_VERSION" ]]; then
+    print_warning "Not running in Termux environment"
+    print_status "This script is optimized for Termux but should work elsewhere"
+fi
+
+# Update packages
+print_status "Updating packages..."
+pkg update -y && pkg upgrade -y
+
+# Install ONLY Python (ultra-minimal approach)
+print_status "Installing Python..."
+pkg install python -y
+
+# Verify Python installation
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version)
+    print_success "Python installed: $PYTHON_VERSION"
+else
+    print_error "Python installation failed"
+    exit 1
+fi
+
+# Create OASIS directory
+print_status "Setting up OASIS directory..."
+mkdir -p ~/oasis_v3
+cd ~/oasis_v3
+
+# Download OASIS files (user will need to provide these)
+print_status "OASIS v3 setup complete!"
+print_warning "Next steps:"
+echo "1. Copy termux_orchestrator.py to ~/oasis_v3/"
+echo "2. Copy oasis_config.json to ~/oasis_v3/"
+echo "3. Update the HF Space URL in oasis_config.json"
+echo "4. Run: python3 termux_orchestrator.py"
+
+print_success "Installation complete! Total footprint: <5MB"
+print_status "Dependencies: Python standard library ONLY""

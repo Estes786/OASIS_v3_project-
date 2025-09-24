@@ -1,0 +1,88 @@
+"#!/bin/bash
+# OASIS v3 Termux Client Setup Script
+# Ultra-lightweight installation for mobile environments
+
+echo "ðŸš€ OASIS v3 Termux Client Setup"
+echo "==============================="
+
+# Check if running in Termux
+if [ -z "$TERMUX_VERSION" ]; then
+    echo "âš ï¸  Warning: Not running in Termux environment"
+    echo "This script is optimized for Termux but should work in other environments"
+fi
+
+# Check Python installation
+if ! command -v python3 &> /dev/null; then
+    echo "âŒ Python 3 is not installed"
+    echo "In Termux: pkg install python"
+    exit 1
+fi
+
+echo "âœ… Python 3 found: $(python3 --version)"
+
+# Check required directories
+if [ ! -d "$(pwd)" ]; then
+    mkdir -p "$(pwd)"
+fi
+
+# Make client executable
+chmod +x oasis_client.py
+
+# Verify stdlib dependencies only
+echo "ðŸ” Verifying dependencies..."
+python3 -c "
+import sys
+import json
+import urllib.request
+import platform
+import hashlib
+import uuid
+import argparse
+import logging
+print('âœ… All standard library modules available')
+"
+
+if [ $? -ne 0 ]; then
+    echo "âŒ Missing required standard library modules"
+    exit 1
+fi
+
+echo ""
+echo "ðŸ“ Installation Directory: $(pwd)"
+echo "ðŸ“„ Files installed:"
+echo "   â”œâ”€â”€ oasis_client.py      (Main client - executable)"
+echo "   â”œâ”€â”€ oasis_config.json    (Configuration file)"
+echo "   â””â”€â”€ setup.sh            (This setup script)"
+
+echo ""
+echo "ðŸŽ¯ Usage Examples:"
+echo ""
+echo "# Interactive mode (recommended):"
+echo "./oasis_client.py"
+echo ""
+echo "# Command line usage:"
+echo "./oasis_client.py --sentiment 'I love this product!'"
+echo "./oasis_client.py --generate 'The future of AI is'"
+echo "./oasis_client.py --content article 'Climate Change'"
+echo "./oasis_client.py --stats"
+echo ""
+echo "# Help:"
+echo "./oasis_client.py --help"
+
+echo ""
+echo "âš¡ ZERO DEPENDENCIES POLICY:"
+echo "   - NO pip install required"
+echo "   - NO external packages"
+echo "   - Pure Python standard library only"
+echo "   - Total footprint < 5MB"
+
+echo ""
+echo "ðŸ”§ Configuration:"
+echo "Edit 'oasis_config.json' to update HuggingFace Spaces URLs:"
+echo "   - orchestrator_url: Your OASIS Orchestrator Space"
+echo "   - api_processor_url: Your OASIS API Processor Space" 
+echo "   - ui_interface_url: Your OASIS UI Interface Space"
+
+echo ""
+echo "âœ… Setup complete! Ready to use OASIS v3 Termux Client"
+echo "ðŸš€ Run: ./oasis_client.py to get started""

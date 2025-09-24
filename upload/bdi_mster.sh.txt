@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""
+FMAA BDI Agent Master Controller
+Main orchestrator for Belief-Desire-Intention architecture
+"""
+
+import asyncio
+import logging
+import signal
+import sys
+from pathlib import Path
+from typing import Dict, Any
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class FMAABDIMaster:
+    """Main BDI Agent controller for FMAA Enterprise"""
+
+    def __init__(self):
+        self.running = False
+        self.components = {}
+        self.config = self.load_config()
+
+    def load_config(self) -> Dict[str, Any]:
+        """Load configuration from environment and files"""
+        import os
+        from dotenv import load_dotenv
+
+        # Load environment variables
+        load_dotenv()
+
+        return {
+            'environment': os.getenv('ENVIRONMENT', 'development'),
+            'debug': os.getenv('DEBUG', 'false').lower() == 'true',
+            'log_level': os.getenv('LOG_LEVEL', 'INFO'),
+            'port': int(os.getenv('PORT', '8080')),
+            'workers': int(os.getenv('MAX_WORKERS', '4')),
+        }
+
+    async def initialize(self):
+        """Initialize all BDI components"""
+        logger.info("🤖 Initializing FMAA BDI Agent...")
+
+        try:
+            # Initialize belief manager
+            from .belief_manager import BeliefManager
+            self.components['belief_manager'] = BeliefManager()
+            await self.components['belief_manager'].initialize()
+
+            # Initialize desire engine
+            from .desire_engine import DesireEngine
+            self.components['desire_engine'] = DesireEngine()
+            await self.components['desire_engine'].initialize()
+
+            # Initialize intention executor
+            from .intention_executor import IntentionExecutor
+            self.components['intention_executor'] = IntentionExecutor()
+            await self.components['intention_executor'].initialize()
+
+            # Initialize decision engine
+            from .decision_engine import DecisionEngine
+            self.components['decision_engine'] = DecisionEngine()
+            await self.components['decision_engine'].initialize()
+
+            logger.info("✅ All BDI components initialized successfully")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize BDI components: {e}")
+            raise
+
+    async def start_web_server(self):
+        """Start the web server for API and dashboard"""
+        from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
+        import uvicorn
+
+        app = FastAPI(
+            title="FMAA BDI Agent",
+            description="Enterprise BDI Agent for Federated Micro-Agents Architecture",
+            version="1.0.0"
+        )
+
+        # Add CORS middleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        # Health check endpoint
+        @app.get("/health")
+        async def health_check():
+            return {
+                "status": "healthy",
+                "components": {
+                    name: "active" for name in self.components.keys()
+                },
+                "timestamp": asyncio.get_event_loop().time()
+            }
+
+        # Metrics endpoint
+        @app.get("/metrics")
+        async def metrics():
+            return {
+                "belief_count": len(self.components.get('belief_manager', {}).get('beliefs', {})),
+                "active_desires": len(self.components.get('desire_engine', {}).get('desires', {})),
+                "running_intentions": len(self.components.get('intention_executor', {}).get('intentions', {})),
+            }
+
+        # Start server
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=self.config['port'],
+            log_level=self.config['log_level'].lower(),
+            workers=self.config['workers'] if not self.config['debug'] else 1
+        )
+
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    async def run_bdi_cycle(self):
+        """Main BDI reasoning cycle"""
+        logger.info("🧠 Starting BDI reasoning cycle...")
+
+        while self.running:
+            try:
+                # Belief update phase
+                beliefs = await self.components['belief_manager'].update_beliefs()
+
+                # Desire generation phase
+                desires = await self.components['desire_engine'].generate_desires(beliefs)
+
+                # Intention planning phase
+                intentions = await self.components['intention_executor'].plan_intentions(desires)
+
+                # Decision and action phase
+                await self.components['decision_engine'].execute_decisions(intentions)
+
+                # Sleep before next cycle
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                logger.error(f"❌ Error in BDI cycle: {e}")
+                await asyncio.sleep(5)  # Wait longer on error
+
+    async def start(self):
+        """Start the FMAA BDI Agent"""
+        self.running = True
+
+        # Initialize components
+        await self.initialize()
+
+        # Start concurrent tasks
+        tasks = [
+            asyncio.create_task(self.run_bdi_cycle()),
+            asyncio.create_task(self.start_web_server())
+        ]
+
+        # Wait for all tasks
+        await asyncio.gather(*tasks)
+
+    async def stop(self):
+        """Stop the FMAA BDI Agent"""
+        logger.info("🛑 Stopping FMAA BDI Agent...")
+        self.running = False
+
+        # Cleanup components
+        for component in self.components.values():
+            if hasattr(component, 'cleanup'):
+                await component.cleanup()
+
+        logger.info("✅ FMAA BDI Agent stopped successfully")
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    logger.info(f"Received signal {signum}, shutting down...")
+    sys.exit(0)
+
+async def main():
+    """Main entry point"""
+    # Setup signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Create and start BDI master
+    master = FMAABDIMaster()
+
+    try:
+        await master.start()
+    except KeyboardInterrupt:
+        await master.stop()
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        await master.stop()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    # Banner
+    print("""
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║    🤖 FMAA BDI Agent Enterprise                               ║
+║                                                               ║
+║    Belief-Desire-Intention Intelligence Engine               ║
+║    ⚡ Zero-Cost • Multi-Cloud • Enterprise Grade              ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+    """)
+
+    asyncio.run(main())

@@ -1,0 +1,285 @@
+name: 🚀 Deploy OASIS Spaces
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'apps/spaces-ui/**'
+      - 'src/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      space:
+        description: 'Space to deploy (sentiment, content-gen, dashboard, all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - sentiment
+        - content-gen  
+        - dashboard
+        - all
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  detect-changes:
+    name: 🔍 Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      sentiment: ${{ steps.changes.outputs.sentiment }}
+      content-gen: ${{ steps.changes.outputs.content-gen }}
+      dashboard: ${{ steps.changes.outputs.dashboard }}
+      core: ${{ steps.changes.outputs.core }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            sentiment:
+              - 'apps/spaces-ui/sentiment/**'
+            content-gen:
+              - 'apps/spaces-ui/content-gen/**'
+            dashboard:
+              - 'apps/spaces-ui/dashboard/**'
+            core:
+              - 'src/**'
+
+  validate-code:
+    name: ✅ Validate Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install gradio fastapi uvicorn requests
+
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile apps/spaces-ui/sentiment/app.py
+          python -m py_compile apps/spaces-ui/content-gen/app.py
+          python -m py_compile apps/spaces-ui/dashboard/app.py
+          python -m py_compile src/api/hf_client.py
+          python -m py_compile src/models/model_manager.py
+
+      - name: Test imports
+        run: |
+          cd apps/spaces-ui/sentiment && python -c "import app; print('✅ Sentiment app imports OK')"
+          cd apps/spaces-ui/content-gen && python -c "import app; print('✅ Content-gen app imports OK')"
+          cd apps/spaces-ui/dashboard && python -c "import app; print('✅ Dashboard app imports OK')"
+
+  deploy-sentiment:
+    name: 🎭 Deploy Sentiment Space
+    needs: [detect-changes, validate-code]
+    runs-on: ubuntu-latest
+    if: |
+      (needs.detect-changes.outputs.sentiment == 'true' || 
+       needs.detect-changes.outputs.core == 'true' ||
+       github.event.inputs.space == 'sentiment' ||
+       github.event.inputs.space == 'all') &&
+      github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Hugging Face CLI
+        run: |
+          pip install huggingface_hub[cli]
+
+      - name: Deploy to Hugging Face Spaces
+        run: |
+          echo "🚀 Deploying Sentiment Analysis Space..."
+          cd apps/spaces-ui/sentiment
+
+          # Create Space if it doesn't exist
+          huggingface-cli repo create elmatador0197/my-oasis-agent --type space --space_sdk gradio || true
+
+          # Configure git
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+          # Clone and update Space
+          git clone https://huggingface.co/spaces/elmatador0197/my-oasis-agent temp_space || git init temp_space
+          cd temp_space
+
+          # Copy files
+          cp ../app.py .
+          cp ../requirements.txt .
+
+          # Commit and push
+          git add .
+          git commit -m "🚀 Auto-deploy from GitHub Actions - $(date '+%Y-%m-%d %H:%M:%S')" || exit 0
+          git push https://elmatador0197:${{ env.HF_TOKEN }}@huggingface.co/spaces/elmatador0197/my-oasis-agent main
+
+          echo "✅ Sentiment Space deployed successfully!"
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          curl -f "https://elmatador0197-my-oasis-agent.hf.space" || echo "⚠️  Space may still be building..."
+
+  deploy-content-gen:
+    name: 📝 Deploy Content Gen Space  
+    needs: [detect-changes, validate-code]
+    runs-on: ubuntu-latest
+    if: |
+      (needs.detect-changes.outputs.content-gen == 'true' || 
+       needs.detect-changes.outputs.core == 'true' ||
+       github.event.inputs.space == 'content-gen' ||
+       github.event.inputs.space == 'all') &&
+      github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Hugging Face CLI
+        run: |
+          pip install huggingface_hub[cli]
+
+      - name: Deploy to Hugging Face Spaces
+        run: |
+          echo "🚀 Deploying Content Generation Space..."
+          cd apps/spaces-ui/content-gen
+
+          # Create Space if it doesn't exist
+          huggingface-cli repo create elmatador0197/content-factory --type space --space_sdk gradio || true
+
+          # Configure git
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+          # Clone and update Space
+          git clone https://huggingface.co/spaces/elmatador0197/content-factory temp_space || git init temp_space
+          cd temp_space
+
+          # Copy files
+          cp ../app.py .
+          cp ../requirements.txt .
+
+          # Commit and push
+          git add .
+          git commit -m "🚀 Auto-deploy from GitHub Actions - $(date '+%Y-%m-%d %H:%M:%S')" || exit 0
+          git push https://elmatador0197:${{ env.HF_TOKEN }}@huggingface.co/spaces/elmatador0197/content-factory main
+
+          echo "✅ Content Generation Space deployed successfully!"
+
+  deploy-dashboard:
+    name: 📊 Deploy Dashboard Space
+    needs: [detect-changes, validate-code]
+    runs-on: ubuntu-latest
+    if: |
+      (needs.detect-changes.outputs.dashboard == 'true' || 
+       needs.detect-changes.outputs.core == 'true' ||
+       github.event.inputs.space == 'dashboard' ||
+       github.event.inputs.space == 'all') &&
+      github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Hugging Face CLI
+        run: |
+          pip install huggingface_hub[cli]
+
+      - name: Deploy to Hugging Face Spaces
+        run: |
+          echo "🚀 Deploying Dashboard Space..."
+          cd apps/spaces-ui/dashboard
+
+          # Create Space if it doesn't exist
+          huggingface-cli repo create elmatador0197/oasis-dashboard --type space --space_sdk gradio || true
+
+          # Configure git  
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+          # Clone and update Space
+          git clone https://huggingface.co/spaces/elmatador0197/oasis-dashboard temp_space || git init temp_space
+          cd temp_space
+
+          # Copy files
+          cp ../app.py .
+          cp ../requirements.txt .
+
+          # Commit and push
+          git add .
+          git commit -m "🚀 Auto-deploy from GitHub Actions - $(date '+%Y-%m-%d %H:%M:%S')" || exit 0
+          git push https://elmatador0197:${{ env.HF_TOKEN }}@huggingface.co/spaces/elmatador0197/oasis-dashboard main
+
+          echo "✅ Dashboard Space deployed successfully!"
+
+  notify-deployment:
+    name: 📢 Notify Deployment
+    needs: [deploy-sentiment, deploy-content-gen, deploy-dashboard]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 OASIS v3 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.deploy-sentiment.result }}" == "success" ]]; then
+            echo "- ✅ **Sentiment Analysis:** [elmatador0197-my-oasis-agent.hf.space](https://elmatador0197-my-oasis-agent.hf.space)" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-sentiment.result }}" == "skipped" ]]; then
+            echo "- ⏭️ **Sentiment Analysis:** Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Sentiment Analysis:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.deploy-content-gen.result }}" == "success" ]]; then
+            echo "- ✅ **Content Generation:** [elmatador0197-content-factory.hf.space](https://elmatador0197-content-factory.hf.space)" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-content-gen.result }}" == "skipped" ]]; then
+            echo "- ⏭️ **Content Generation:** Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Content Generation:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.deploy-dashboard.result }}" == "success" ]]; then
+            echo "- ✅ **Business Dashboard:** [elmatador0197-oasis-dashboard.hf.space](https://elmatador0197-oasis-dashboard.hf.space)" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-dashboard.result }}" == "skipped" ]]; then
+            echo "- ⏭️ **Business Dashboard:** Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Business Dashboard:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎭 [Sentiment Analysis](https://elmatador0197-my-oasis-agent.hf.space)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 [Content Generation](https://elmatador0197-content-factory.hf.space)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 [Business Dashboard](https://elmatador0197-oasis-dashboard.hf.space)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Powered by OASIS v3 Ultra-Lightweight AI Infrastructure*" >> $GITHUB_STEP_SUMMARY

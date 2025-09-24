@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Enhanced Token Configuration
+Termux-optimized token setup with validation
+"""
+
+import os
+import sys
+import requests
+from pathlib import Path
+
+def validate_token(token):
+    """Validate HF token by making test API call"""
+    if not token or len(token) < 20:
+        return False, "Token too short or empty"
+    
+    try:
+        url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {"inputs": "test"}
+        
+        print("🔍 Validating token...")
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        if response.status_code in [200, 503]:  # 503 = model loading
+            return True, "Token is valid"
+        elif response.status_code == 401:
+            return False, "Invalid token or insufficient permissions"
+        else:
+            return False, f"Unexpected response: {response.status_code}"
+    
+    except Exception as e:
+        return False, f"Validation failed: {str(e)}"
+
+def set_hf_token(token, validate=True):
+    """Set HF token in config file with validation"""
+    if not token or token.strip() == "":
+        print("❌ No token provided!")
+        print("Usage: python set_token.py YOUR_HF_TOKEN_HERE")
+        print("\n📝 To get your token:")
+        print("1. Go to: https://huggingface.co/settings/tokens")
+        print("2. Create new token (Read access is enough)")
+        print("3. Copy and paste the token here")
+        return False
+    
+    token = token.strip()
+    
+    # Validate token if requested
+    if validate:
+        is_valid, message = validate_token(token)
+        if not is_valid:
+            print(f"❌ Token validation failed: {message}")
+            print("Please check your token and try again.")
+            return False
+        print(f"✅ {message}")
+    
+    # Create config directory
+    config_file = Path("config/.env")
+    config_file.parent.mkdir(exist_ok=True)
+    
+    # Save token with environment variable format
+    config_content = f"""# Hugging Face Configuration
+HF_TOKEN={token}
+HF_USERNAME=your_username_here
+
+# Business Configuration  
+BUSINESS_EMAIL=your_email@example.com
+PRICING_TIER=premium
+
+# System Configuration
+API_TIMEOUT=60
+MAX_RETRIES=3
+"""
+    
+    with open(config_file, 'w') as f:
+        f.write(config_content)
+    
+    # Also set environment variable for current session
+    os.environ['HF_TOKEN'] = token
+    
+    print(f"✅ Token saved to {config_file}")
+    print(f"🔑 Token: {token[:10]}...{token[-4:]}")
+    print(f"🌍 Environment variable set for current session")
+    print()
+    print("🎉 Setup complete! You can now run:")
+    print("   python termux_launcher.py")
+    print("   python termux_launcher.py --demo")
+    print("   python termux_test.py")
+    return True
+
+def interactive_setup():
+    """Interactive token setup for users without command line args"""
+    print("🔑 OASIS 2.0 - Interactive Token Setup")
+    print("=" * 40)
+    print()
+    print("📝 To get your Hugging Face token:")
+    print("1. Go to: https://huggingface.co/settings/tokens")
+    print("2. Create a new token (Read access is enough)")
+    print("3. Copy the token (starts with 'hf_')")
+    print("4. Paste it below")
+    print()
+    
+    try:
+        token = input("🔑 Enter your HF_TOKEN: ").strip()
+        if token:
+            return set_hf_token(token)
+        else:
+            print("❌ No token entered!")
+            return False
+    except KeyboardInterrupt:
+        print("\n👋 Setup cancelled by user")
+        return False
+    except Exception as e:
+        print(f"❌ Setup error: {e}")
+        return False
+
+def main():
+    """Main function"""
+    print("🔑 OASIS 2.0 - Enhanced Token Configuration")
+    print("=" * 45)
+    
+    if len(sys.argv) < 2:
+        print("📋 Usage options:")
+        print("   python set_token.py YOUR_HF_TOKEN_HERE")
+        print("   python set_token.py --interactive")
+        print("   python set_token.py --no-validate YOUR_TOKEN")
+        print()
+        
+        # Ask if user wants interactive setup
+        try:
+            choice = input("🤔 Start interactive setup? (y/n): ").strip().lower()
+            if choice in ['y', 'yes']:
+                interactive_setup()
+            else:
+                print("👋 Setup cancelled")
+        except KeyboardInterrupt:
+            print("\n👋 Goodbye!")
+        return
+    
+    # Parse command line arguments
+    if sys.argv[1] == "--interactive":
+        interactive_setup()
+    elif sys.argv[1] == "--no-validate" and len(sys.argv) > 2:
+        token = sys.argv[2]
+        set_hf_token(token, validate=False)
+    else:
+        token = sys.argv[1]
+        set_hf_token(token)
+
+if __name__ == "__main__":
+    main()

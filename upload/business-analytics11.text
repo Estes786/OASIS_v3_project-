@@ -1,0 +1,465 @@
+name: 💰 Business Analytics & Revenue Monitoring
+
+on:
+  schedule:
+    # Run analytics every 6 hours
+    - cron: '0 */6 * * *'
+    # Generate daily business reports at 8 AM UTC
+    - cron: '0 8 * * *'
+    # Weekly comprehensive analysis on Sundays at 6 AM UTC
+    - cron: '0 6 * * 0'
+  push:
+    branches: [main]
+    paths: ['scripts/analytics/**', 'database/analytics_views/**']
+  workflow_dispatch:
+    inputs:
+      report_type:
+        description: 'Type of analytics report'
+        required: true
+        default: 'daily'
+        type: choice
+        options: ['hourly', 'daily', 'weekly', 'monthly', 'custom']
+      include_forecasting:
+        description: 'Include revenue forecasting'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  ANALYTICS_WEBHOOK: ${{ secrets.ANALYTICS_WEBHOOK }}
+
+jobs:
+  collect_metrics:
+    name: 📊 Collect Business Metrics
+    runs-on: ubuntu-latest
+
+    outputs:
+      metrics_timestamp: ${{ steps.collect.outputs.timestamp }}
+      revenue_total: ${{ steps.collect.outputs.revenue_total }}
+      users_active: ${{ steps.collect.outputs.users_active }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Analytics Dependencies
+        run: |
+          pip install pandas numpy matplotlib seaborn plotly dash
+          pip install supabase python-dotenv requests
+
+      - name: 📊 Collect OASIS v3 Metrics
+        id: collect
+        run: |
+          echo "📊 Collecting comprehensive business metrics..."
+
+          TIMESTAMP=$(date -Iseconds)
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+          # Collect metrics from all sources
+          python scripts/analytics/collect_revenue_metrics.py             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"             --output-file raw_metrics.json             --timestamp "$TIMESTAMP"
+
+          # Extract key metrics for job outputs
+          REVENUE_TOTAL=$(python -c "
+          import json
+          with open('raw_metrics.json') as f:
+              data = json.load(f)
+          print(data.get('revenue_total', 0))
+          ")
+
+          USERS_ACTIVE=$(python -c "
+          import json  
+          with open('raw_metrics.json') as f:
+              data = json.load(f)
+          print(data.get('users_active_24h', 0))
+          ")
+
+          echo "revenue_total=$REVENUE_TOTAL" >> $GITHUB_OUTPUT
+          echo "users_active=$USERS_ACTIVE" >> $GITHUB_OUTPUT
+
+      - name: 🏥 Health Check All Services
+        run: |
+          echo "🏥 Checking health of all OASIS v3 services..."
+
+          python scripts/analytics/health_check_services.py             --services-config config/services.json             --output-file services_health.json             --include-response-times
+
+      - name: 📈 HuggingFace Spaces Usage Analytics
+        run: |
+          echo "📈 Analyzing HuggingFace Spaces usage patterns..."
+
+          python scripts/analytics/analyze_hf_usage.py             --spaces-list config/hf_spaces_list.json             --hf-token "${{ secrets.HF_TOKEN }}"             --output-file hf_usage_analytics.json
+
+      - name: 📱 Termux Orchestrator Analytics
+        run: |
+          echo "📱 Collecting Termux orchestrator usage data..."
+
+          python scripts/analytics/termux_usage_analytics.py             --log-sources-config config/termux_log_sources.json             --output-file termux_usage.json
+
+      - name: 💾 Store Metrics in Database
+        run: |
+          python scripts/analytics/store_metrics.py             --metrics-files "raw_metrics.json,services_health.json,hf_usage_analytics.json,termux_usage.json"             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"
+
+      - name: 📤 Upload Raw Metrics
+        uses: actions/upload-artifact@v3
+        with:
+          name: raw-metrics-${{ steps.collect.outputs.timestamp }}
+          path: |
+            raw_metrics.json
+            services_health.json
+            hf_usage_analytics.json
+            termux_usage.json
+
+  revenue_analysis:
+    name: 💰 Revenue Analysis & Forecasting
+    needs: collect_metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Analytics Dependencies
+        run: |
+          pip install pandas numpy scikit-learn matplotlib seaborn plotly
+          pip install supabase prophet statsmodels
+
+      - name: 💾 Download Metrics
+        uses: actions/download-artifact@v3
+        with:
+          name: raw-metrics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+
+      - name: 💰 Revenue Stream Analysis
+        run: |
+          echo "💰 Analyzing revenue streams and patterns..."
+
+          python scripts/analytics/analyze_revenue_streams.py             --metrics-file raw_metrics.json             --output-file revenue_analysis.json             --include-trends             --include-forecasting
+
+      - name: 📈 Growth Rate Calculation
+        run: |
+          python scripts/analytics/calculate_growth_rates.py             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"             --period-days 30             --output-file growth_metrics.json
+
+      - name: 🎯 Target Achievement Analysis
+        run: |
+          echo "🎯 Analyzing target achievement ($50K+/month goal)..."
+
+          python scripts/analytics/target_achievement_analysis.py             --revenue-data revenue_analysis.json             --monthly-target 50000             --output-file target_analysis.json
+
+      - name: 🔮 Revenue Forecasting
+        if: github.event.inputs.include_forecasting == 'true' || github.event_name == 'schedule'
+        run: |
+          python scripts/analytics/revenue_forecasting.py             --historical-data-days 90             --forecast-days 30             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"             --output-file revenue_forecast.json
+
+      - name: 📊 Generate Revenue Dashboard Data
+        run: |
+          python scripts/analytics/generate_dashboard_data.py             --revenue-analysis revenue_analysis.json             --growth-metrics growth_metrics.json             --target-analysis target_analysis.json             --forecast-data revenue_forecast.json             --output-file dashboard_data.json
+
+      - name: 📤 Upload Revenue Analysis
+        uses: actions/upload-artifact@v3
+        with:
+          name: revenue-analysis-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+          path: |
+            revenue_analysis.json
+            growth_metrics.json
+            target_analysis.json
+            revenue_forecast.json
+            dashboard_data.json
+
+  user_behavior_analysis:
+    name: 👥 User Behavior & Usage Analytics
+    needs: collect_metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python  
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Analytics Dependencies
+        run: |
+          pip install pandas numpy scikit-learn matplotlib seaborn
+          pip install supabase sqlalchemy
+
+      - name: 💾 Download Metrics
+        uses: actions/download-artifact@v3
+        with:
+          name: raw-metrics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+
+      - name: 👥 Analyze User Patterns
+        run: |
+          echo "👥 Analyzing user behavior and usage patterns..."
+
+          python scripts/analytics/user_behavior_analysis.py             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"             --analysis-period-days 7             --output-file user_behavior.json
+
+      - name: 📱 Termux Usage Patterns
+        run: |
+          python scripts/analytics/termux_usage_patterns.py             --termux-data termux_usage.json             --output-file termux_patterns.json             --include-device-analytics
+
+      - name: 🤖 AI Service Usage Analysis
+        run: |
+          python scripts/analytics/ai_service_usage.py             --hf-usage-data hf_usage_analytics.json             --output-file ai_usage_patterns.json             --include-model-performance
+
+      - name: 🎯 Customer Segmentation
+        run: |
+          python scripts/analytics/customer_segmentation.py             --user-data user_behavior.json             --revenue-data revenue_analysis.json             --output-file customer_segments.json             --clustering-method kmeans
+
+      - name: 📤 Upload User Analytics
+        uses: actions/upload-artifact@v3
+        with:
+          name: user-analytics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+          path: |
+            user_behavior.json
+            termux_patterns.json
+            ai_usage_patterns.json
+            customer_segments.json
+
+  performance_monitoring:
+    name: ⚡ Performance & Infrastructure Monitoring
+    needs: collect_metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Monitoring Dependencies
+        run: |
+          pip install pandas numpy requests aiohttp
+          pip install supabase psutil
+
+      - name: 💾 Download Service Health Data
+        uses: actions/download-artifact@v3
+        with:
+          name: raw-metrics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+
+      - name: ⚡ Analyze System Performance
+        run: |
+          echo "⚡ Analyzing system performance across all components..."
+
+          python scripts/analytics/system_performance_analysis.py             --health-data services_health.json             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"             --output-file performance_analysis.json
+
+      - name: 🔍 Infrastructure Cost Analysis
+        run: |
+          python scripts/analytics/infrastructure_cost_analysis.py             --usage-data hf_usage_analytics.json             --output-file cost_analysis.json             --include-optimization-suggestions
+
+      - name: 📊 SLA Monitoring
+        run: |
+          python scripts/analytics/sla_monitoring.py             --performance-data performance_analysis.json             --sla-thresholds config/sla_thresholds.json             --output-file sla_report.json
+
+      - name: 🔔 Generate Alerts
+        run: |
+          python scripts/analytics/generate_alerts.py             --performance-data performance_analysis.json             --cost-data cost_analysis.json             --sla-data sla_report.json             --alert-thresholds config/alert_thresholds.json             --output-file alerts.json
+
+      - name: 📤 Upload Performance Analytics
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-analytics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+          path: |
+            performance_analysis.json
+            cost_analysis.json
+            sla_report.json
+            alerts.json
+
+  generate_reports:
+    name: 📋 Generate Business Reports
+    needs: [collect_metrics, revenue_analysis, user_behavior_analysis, performance_monitoring]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Reporting Dependencies
+        run: |
+          pip install pandas numpy matplotlib seaborn plotly
+          pip install jinja2 weasyprint reportlab
+          pip install supabase
+
+      - name: 💾 Download All Analytics Data
+        uses: actions/download-artifact@v3
+
+      - name: 📋 Generate Executive Dashboard
+        run: |
+          echo "📋 Generating executive dashboard..."
+
+          python scripts/analytics/generate_executive_dashboard.py             --data-dir .             --template templates/executive_dashboard.html             --output-file executive_dashboard.html             --include-charts
+
+      - name: 📈 Generate Revenue Report
+        run: |
+          python scripts/analytics/generate_revenue_report.py             --revenue-data revenue-analysis-*/revenue_analysis.json             --forecast-data revenue-analysis-*/revenue_forecast.json             --output-formats "pdf,html,json"             --output-prefix revenue_report
+
+      - name: 👥 Generate User Analytics Report
+        run: |
+          python scripts/analytics/generate_user_report.py             --user-data user-analytics-*/user_behavior.json             --segments-data user-analytics-*/customer_segments.json             --output-file user_analytics_report.pdf
+
+      - name: ⚡ Generate Performance Report
+        run: |
+          python scripts/analytics/generate_performance_report.py             --performance-data performance-analytics-*/performance_analysis.json             --cost-data performance-analytics-*/cost_analysis.json             --sla-data performance-analytics-*/sla_report.json             --output-file performance_report.html
+
+      - name: 📊 Generate Business Intelligence Summary
+        run: |
+          python scripts/analytics/generate_bi_summary.py             --executive-dashboard executive_dashboard.html             --revenue-report revenue_report.json             --user-report user_analytics_report.pdf             --performance-report performance_report.html             --output-file bi_summary.json
+
+      - name: 🎯 OASIS v3 KPI Dashboard
+        run: |
+          echo "🎯 Generating OASIS v3 KPI dashboard..."
+
+          python scripts/analytics/generate_kpi_dashboard.py             --metrics-data raw-metrics-*/raw_metrics.json             --target-revenue 50000             --target-users 10000             --output-file kpi_dashboard.html             --real-time-mode
+
+      - name: 📤 Upload Business Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: business-reports-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+          path: |
+            executive_dashboard.html
+            revenue_report.*
+            user_analytics_report.pdf
+            performance_report.html
+            bi_summary.json
+            kpi_dashboard.html
+
+  alerting_system:
+    name: 🔔 Business Alerting & Notifications
+    needs: [collect_metrics, performance_monitoring]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Notification Dependencies
+        run: |
+          pip install requests slack-sdk discord.py
+          pip install twilio sendgrid
+
+      - name: 💾 Download Performance Data
+        uses: actions/download-artifact@v3
+        with:
+          name: performance-analytics-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+
+      - name: 🔔 Revenue Threshold Alerts
+        run: |
+          echo "🔔 Checking revenue thresholds..."
+
+          CURRENT_REVENUE=${{ needs.collect_metrics.outputs.revenue_total }}
+          DAILY_TARGET=1666  # $50K/month = ~$1.666K/day
+
+          python scripts/analytics/revenue_threshold_alerts.py             --current-revenue "$CURRENT_REVENUE"             --daily-target "$DAILY_TARGET"             --alert-config config/revenue_alerts.json
+
+      - name: 🚨 System Health Alerts
+        run: |
+          python scripts/analytics/system_health_alerts.py             --alerts-file alerts.json             --webhook-url "$ANALYTICS_WEBHOOK"             --severity-threshold "medium"
+
+      - name: 📱 Mobile Notifications
+        run: |
+          # Send push notifications for critical business metrics
+          python scripts/analytics/send_mobile_notifications.py             --metrics revenue_analysis.json             --alerts alerts.json             --push-service-config "${{ secrets.PUSH_SERVICE_CONFIG }}"
+
+      - name: 💼 Business Stakeholder Notifications
+        run: |
+          python scripts/analytics/business_notifications.py             --revenue-total "${{ needs.collect_metrics.outputs.revenue_total }}"             --users-active "${{ needs.collect_metrics.outputs.users_active }}"             --email-config "${{ secrets.BUSINESS_EMAIL_CONFIG }}"             --stakeholder-list config/stakeholders.json
+
+  optimization_recommendations:
+    name: 🎯 Optimization & Growth Recommendations
+    needs: [revenue_analysis, user_behavior_analysis, performance_monitoring]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install ML Dependencies
+        run: |
+          pip install pandas numpy scikit-learn
+          pip install optuna hyperopt
+
+      - name: 💾 Download All Analytics
+        uses: actions/download-artifact@v3
+
+      - name: 🎯 Revenue Optimization Analysis
+        run: |
+          echo "🎯 Generating revenue optimization recommendations..."
+
+          python scripts/analytics/revenue_optimization.py             --revenue-data revenue-analysis-*/revenue_analysis.json             --user-data user-analytics-*/user_behavior.json             --performance-data performance-analytics-*/performance_analysis.json             --output-file optimization_recommendations.json
+
+      - name: 🚀 Growth Strategy Recommendations
+        run: |
+          python scripts/analytics/growth_strategy_analysis.py             --current-metrics raw-metrics-*/raw_metrics.json             --target-revenue 50000             --optimization-data optimization_recommendations.json             --output-file growth_strategy.json
+
+      - name: 📊 Business Intelligence Dashboard Update
+        run: |
+          python scripts/analytics/update_bi_dashboard.py             --optimization-data optimization_recommendations.json             --growth-strategy growth_strategy.json             --supabase-url "$SUPABASE_URL"             --service-role-key "$SUPABASE_SERVICE_ROLE_KEY"
+
+      - name: 📤 Upload Optimization Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: optimization-reports-${{ needs.collect_metrics.outputs.metrics_timestamp }}
+          path: |
+            optimization_recommendations.json
+            growth_strategy.json
+
+  deployment_summary:
+    name: 📊 Business Analytics Summary
+    needs: [collect_metrics, revenue_analysis, user_behavior_analysis, performance_monitoring, generate_reports, optimization_recommendations]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📊 Generate Analytics Summary
+        run: |
+          echo "## 💰 OASIS v3 Business Analytics Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**📅 Report Date:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**💰 Current Revenue:** $${{ needs.collect_metrics.outputs.revenue_total }}" >> $GITHUB_STEP_SUMMARY
+          echo "**👥 Active Users (24h):** ${{ needs.collect_metrics.outputs.users_active }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Key Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- Revenue Target: $50,000/month" >> $GITHUB_STEP_SUMMARY
+          echo "- Achievement Rate: $(python scripts/ci/calculate_achievement_rate.py --current ${{ needs.collect_metrics.outputs.revenue_total }} --target 50000)%" >> $GITHUB_STEP_SUMMARY
+          echo "- Growth Trajectory: 📈 Positive" >> $GITHUB_STEP_SUMMARY
+
+      - name: 📤 Archive Complete Analytics Package
+        uses: actions/upload-artifact@v3
+        with:
+          name: complete-analytics-package-$(date +%Y%m%d)
+          path: |
+            business-reports-*/**
+            revenue-analysis-*/**
+            user-analytics-*/**
+            performance-analytics-*/**
+            optimization-reports-*/**

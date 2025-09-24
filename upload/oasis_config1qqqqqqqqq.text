@@ -1,0 +1,33 @@
+{
+  "base_url": "https://your-huggingface-space.hf.space",
+  "api_key": "",
+  "timeout": 30,
+  "retries": 3,
+  "user_id": "termux_user",
+  "device_info": "android_termux",
+  "version": "3.0.0",
+  "features": {
+    "text_generation": true,
+    "sentiment_analysis": true,
+    "summarization": true,
+    "translation": true,
+    "question_answering": true,
+    "business_engine": true,
+    "revenue_tracking": true
+  },
+  "performance": {
+    "max_concurrent_requests": 5,
+    "cache_enabled": false,
+    "compression": true
+  },
+  "monetization": {
+    "track_usage": true,
+    "revenue_streams": ["api_calls", "premium", "enterprise", "data_insights"],
+    "pricing": {
+      "api_call": 0.01,
+      "premium_monthly": 9.99,
+      "enterprise_monthly": 99.99,
+      "data_analysis": 0.05
+    }
+  }
+}

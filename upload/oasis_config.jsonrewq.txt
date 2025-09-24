@@ -1,0 +1,20 @@
+"{
+  "hf_spaces_url": "https://your-space-name.hf.space",
+  "api_timeout": 30,
+  "retry_attempts": 3,
+  "revenue_target_monthly": 50000,
+  "mobile_user_id": "termux_production_user",
+  "session_persistence": true,
+  "compression_enabled": true,
+  "cache_enabled": false,
+  "quantum_enabled": true,
+  "analytics_enabled": true,
+  "enterprise_mode": true,
+  "pricing": {
+    "sentiment_analysis": 0.01,
+    "text_generation": 0.02,
+    "content_creation": 0.05,
+    "batch_processing": 0.005,
+    "premium_multiplier": 2.0
+  }
+}"

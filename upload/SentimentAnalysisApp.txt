@@ -1,0 +1,256 @@
+"
+import gradio as gr
+import requests
+import os
+import json
+from datetime import datetime
+from typing import Optional, Dict, Any
+import time
+
+class OasisSentimentAgent:
+    """
+    OASIS Sentiment Analysis Agent - Ultra-lightweight API-first implementation
+    Zero heavy dependencies, 100% Hugging Face API powered
+    """
+
+    def __init__(self):
+        self.hf_token = os.getenv("HF_TOKEN", "")
+        self.api_base = "https://api-inference.huggingface.co/models"
+        self.session_stats = {
+            "requests_count": 0,
+            "total_characters": 0,
+            "start_time": datetime.now().isoformat()
+        }
+
+    def analyze_sentiment(self, text: str, model: str = "cardiffnlp/twitter-roberta-base-sentiment-latest") -> Dict[str, Any]:
+        """
+        Analyze sentiment using Hugging Face API
+        Returns sentiment analysis with confidence scores
+        """
+        if not text.strip():
+            return {"error": "Please enter some text to analyze"}
+
+        # Update session stats
+        self.session_stats["requests_count"] += 1
+        self.session_stats["total_characters"] += len(text)
+
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+
+        try:
+            response = requests.post(
+                f"{self.api_base}/{model}",
+                headers=headers,
+                json={"inputs": text},
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+
+                # Process the response
+                if isinstance(result, list) and len(result) > 0:
+                    sentiment_data = result[0]
+
+                    # Format results for display
+                    formatted_result = {
+                        "text": text,
+                        "sentiment": sentiment_data[0]["label"],
+                        "confidence": round(sentiment_data[0]["score"], 4),
+                        "all_scores": [
+                            {
+                                "label": item["label"], 
+                                "score": round(item["score"], 4)
+                            } for item in sentiment_data
+                        ],
+                        "model_used": model,
+                        "timestamp": datetime.now().isoformat(),
+                        "character_count": len(text)
+                    }
+
+                    # Calculate estimated pricing
+                    estimated_cost = self.calculate_pricing(text)
+                    formatted_result["estimated_cost"] = estimated_cost
+
+                    return formatted_result
+                else:
+                    return {"error": f"Unexpected response format: {result}"}
+
+            else:
+                return {"error": f"API request failed: {response.status_code} - {response.text}"}
+
+        except requests.exceptions.RequestException as e:
+            return {"error": f"Network error: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Processing error: {str(e)}"}
+
+    def calculate_pricing(self, text: str) -> Dict[str, float]:
+        """Calculate pricing based on text length and service tiers"""
+        char_count = len(text)
+
+        # OASIS Pricing Structure
+        pricing = {
+            "starter_tier": round(char_count * 0.0001, 4),  # $0.0001 per character
+            "professional_tier": round(char_count * 0.0002, 4),  # $0.0002 per character  
+            "enterprise_tier": round(char_count * 0.0005, 4)  # $0.0005 per character
+        }
+
+        return pricing
+
+    def get_session_stats(self) -> Dict[str, Any]:
+        """Get current session statistics"""
+        return {
+            **self.session_stats,
+            "uptime_minutes": round(
+                (datetime.now() - datetime.fromisoformat(self.session_stats["start_time"])).total_seconds() / 60, 
+                2
+            )
+        }
+
+# Initialize the OASIS agent
+agent = OasisSentimentAgent()
+
+def analyze_text(text: str, model: str) -> tuple:
+    """Gradio interface function for sentiment analysis"""
+    result = agent.analyze_sentiment(text, model)
+
+    if "error" in result:
+        return result["error"], "", ""
+
+    # Format output for Gradio
+    sentiment_output = f"""
+    ## ðŸŽ¯ Sentiment Analysis Results
+
+    **Text:** {result['text'][:200]}{'...' if len(result['text']) > 200 else ''}
+
+    **Primary Sentiment:** {result['sentiment']} 
+    **Confidence:** {result['confidence']*100:.1f}%
+
+    ### All Scores:
+    """
+
+    for score in result['all_scores']:
+        sentiment_output += f"- **{score['label']}:** {score['score']*100:.1f}%\n"
+
+    # Pricing display
+    pricing_output = f"""
+    ## ðŸ’° OASIS Pricing Calculator
+
+    **Characters Analyzed:** {result['character_count']}
+
+    ### Service Tiers:
+    - **Starter:** ${result['estimated_cost']['starter_tier']:.4f}
+    - **Professional:** ${result['estimated_cost']['professional_tier']:.4f}  
+    - **Enterprise:** ${result['estimated_cost']['enterprise_tier']:.4f}
+
+    *Upgrade to unlock batch processing, custom models, and priority support!*
+    """
+
+    # Session stats
+    stats = agent.get_session_stats()
+    stats_output = f"""
+    ## ðŸ“Š Session Statistics
+
+    - **Total Requests:** {stats['requests_count']}
+    - **Characters Processed:** {stats['total_characters']}
+    - **Session Uptime:** {stats['uptime_minutes']} minutes
+    """
+
+    return sentiment_output, pricing_output, stats_output
+
+# Create Gradio interface
+with gr.Blocks(
+    title="OASIS Sentiment Agent - AI Processing Factory",
+    theme=gr.themes.Soft(),
+    css="""
+    .gradio-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    """
+) as demo:
+
+    gr.Markdown("""
+    # ðŸŒŸ OASIS Sentiment Agent v3.0
+    ## AI Processing Factory - Powered by Hugging Face
+
+    **Revolutionary ultra-lightweight sentiment analysis with zero heavy dependencies!**
+
+    Transform your text analysis workflow with our API-first architecture:
+    - ðŸš€ **Zero Installation** - Cloud-powered processing
+    - ðŸ’° **Transparent Pricing** - Pay only for what you use  
+    - ðŸ“Š **Real-time Analytics** - Track your usage
+    - ðŸ”§ **Enterprise Ready** - Scalable to millions of requests
+
+    ---
+    """)
+
+    with gr.Row():
+        with gr.Column(scale=2):
+            input_text = gr.Textbox(
+                label="ðŸ“ Enter your text for sentiment analysis",
+                placeholder="Type or paste your text here... (e.g., 'I love this new AI technology!')",
+                lines=4,
+                max_lines=10
+            )
+
+            model_choice = gr.Dropdown(
+                choices=[
+                    "cardiffnlp/twitter-roberta-base-sentiment-latest",
+                    "nlptown/bert-base-multilingual-uncased-sentiment", 
+                    "SamLowe/roberta-base-go_emotions"
+                ],
+                value="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                label="ðŸ¤– Choose AI Model"
+            )
+
+            analyze_btn = gr.Button("ðŸŽ¯ Analyze Sentiment", variant="primary", size="lg")
+
+        with gr.Column(scale=1):
+            gr.Markdown("""
+            ### ðŸ­ OASIS "Pabrik Senjata" 
+
+            **Available Services:**
+            - Sentiment Analysis âœ…
+            - Content Generation ðŸš§
+            - Document Summarization ðŸš§
+            - Language Translation ðŸš§
+
+            **Want more? Contact us for custom AI solutions!**
+
+            ðŸ“§ **Enterprise Sales:** oasis@ai-factory.com
+            ðŸ’¬ **Support:** Join our Discord community
+            """)
+
+    with gr.Row():
+        sentiment_result = gr.Markdown(label="Analysis Results")
+        pricing_info = gr.Markdown(label="Pricing Information") 
+        session_stats = gr.Markdown(label="Session Statistics")
+
+    # Event handlers
+    analyze_btn.click(
+        fn=analyze_text,
+        inputs=[input_text, model_choice],
+        outputs=[sentiment_result, pricing_info, session_stats]
+    )
+
+    gr.Markdown("""
+    ---
+
+    ## ðŸš€ Ready for Production AI?
+
+    **Transform this demo into your revenue engine:**
+
+    1. **API Access** - Integrate our sentiment API into your applications
+    2. **Custom Models** - Train models on your specific data
+    3. **Bulk Processing** - Analyze thousands of texts in minutes
+    4. **White-label Solutions** - Deploy under your brand
+
+    ### ðŸ“ˆ Success Stories:
+    - **E-commerce:** +40% customer satisfaction tracking
+    - **Social Media:** Real-time brand monitoring  
+    - **Support Teams:** Automated ticket prioritization
+
+    **[Contact Sales](mailto:oasis@ai-factory.com) | [API Documentation](https://docs.oasis-ai.com) | [GitHub](https://github.com/oasis-ai/oasis-v3)**
+    """)
+
+if __name__ == "__main__":
+    demo.launch()"

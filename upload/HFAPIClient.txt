@@ -1,0 +1,361 @@
+"
+"""
+OASIS Hugging Face API Client v3.0
+Ultra-lightweight API client with zero heavy dependencies
+100% API-first architecture for mobile and cloud deployment
+"""
+
+import requests
+import json
+import time
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Union
+import os
+
+class HuggingFaceClient:
+    """
+    Ultra-lightweight Hugging Face API client
+    Zero dependencies on heavy ML libraries (no torch, numpy, pandas)
+    Pure API-based approach for maximum compatibility and minimal footprint
+    """
+
+    def __init__(self, token: Optional[str] = None, base_url: str = "https://api-inference.huggingface.co"):
+        """
+        Initialize the Hugging Face client
+
+        Args:
+            token: HF API token (or from environment)
+            base_url: API base URL
+        """
+        self.token = token or os.getenv("HF_TOKEN", "")
+        self.base_url = base_url
+        self.headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+        # Session tracking for analytics
+        self.session_stats = {
+            "requests_made": 0,
+            "total_tokens": 0,
+            "errors": 0,
+            "start_time": datetime.now().isoformat()
+        }
+
+        # Model categories for intelligent routing
+        self.model_categories = {
+            "sentiment": [
+                "cardiffnlp/twitter-roberta-base-sentiment-latest",
+                "nlptown/bert-base-multilingual-uncased-sentiment",
+                "SamLowe/roberta-base-go_emotions"
+            ],
+            "text_generation": [
+                "microsoft/DialoGPT-large",
+                "gpt2-large",
+                "facebook/blenderbot-400M-distill"
+            ],
+            "summarization": [
+                "facebook/bart-large-cnn",
+                "t5-base",
+                "sshleifer/distilbart-cnn-12-6"
+            ],
+            "translation": [
+                "Helsinki-NLP/opus-mt-en-fr",
+                "Helsinki-NLP/opus-mt-en-es", 
+                "Helsinki-NLP/opus-mt-en-de"
+            ],
+            "question_answering": [
+                "deepset/roberta-base-squad2",
+                "distilbert-base-cased-distilled-squad",
+                "microsoft/DialoGPT-medium"
+            ]
+        }
+
+    def _make_request(self, endpoint: str, payload: Dict[str, Any], timeout: int = 30) -> Dict[str, Any]:
+        """
+        Make API request with error handling and retry logic
+        """
+        url = f"{self.base_url}/{endpoint}"
+
+        try:
+            response = requests.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=timeout
+            )
+
+            self.session_stats["requests_made"] += 1
+
+            if response.status_code == 200:
+                return {"success": True, "data": response.json()}
+            elif response.status_code == 503:
+                # Model loading - retry after wait
+                time.sleep(5)
+                retry_response = requests.post(url, headers=self.headers, json=payload, timeout=timeout)
+                if retry_response.status_code == 200:
+                    return {"success": True, "data": retry_response.json()}
+                else:
+                    self.session_stats["errors"] += 1
+                    return {"success": False, "error": f"Model loading failed: {retry_response.text}"}
+            else:
+                self.session_stats["errors"] += 1
+                return {"success": False, "error": f"API error {response.status_code}: {response.text}"}
+
+        except requests.exceptions.RequestException as e:
+            self.session_stats["errors"] += 1
+            return {"success": False, "error": f"Network error: {str(e)}"}
+        except Exception as e:
+            self.session_stats["errors"] += 1
+            return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+    def sentiment_analysis(self, text: str, model: str = None) -> Dict[str, Any]:
+        """
+        Analyze sentiment of text using Hugging Face models
+
+        Args:
+            text: Input text to analyze
+            model: Specific model to use (defaults to best available)
+
+        Returns:
+            Dict with sentiment analysis results
+        """
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        # Use specified model or default to best performing
+        model = model or self.model_categories["sentiment"][0]
+        endpoint = f"models/{model}"
+        payload = {"inputs": text}
+
+        result = self._make_request(endpoint, payload)
+
+        if result["success"]:
+            # Process and format results
+            raw_data = result["data"]
+            if isinstance(raw_data, list) and len(raw_data) > 0:
+                sentiment_data = raw_data[0]
+
+                formatted_result = {
+                    "text": text,
+                    "sentiment": sentiment_data[0]["label"],
+                    "confidence": round(sentiment_data[0]["score"], 4),
+                    "all_scores": [
+                        {"label": item["label"], "score": round(item["score"], 4)}
+                        for item in sentiment_data
+                    ],
+                    "model_used": model,
+                    "timestamp": datetime.now().isoformat(),
+                    "character_count": len(text)
+                }
+
+                # Update token stats
+                self.session_stats["total_tokens"] += len(text.split())
+
+                return {"success": True, "data": formatted_result}
+            else:
+                return {"success": False, "error": f"Unexpected response format: {raw_data}"}
+        else:
+            return result
+
+    def generate_text(self, prompt: str, model: str = None, max_length: int = 512, 
+                     temperature: float = 0.7) -> Dict[str, Any]:
+        """
+        Generate text using Hugging Face language models
+
+        Args:
+            prompt: Input text prompt
+            model: Model to use for generation
+            max_length: Maximum length of generated text
+            temperature: Randomness in generation (0.0 = deterministic, 1.0 = random)
+
+        Returns:
+            Dict with generated text results
+        """
+        if not prompt.strip():
+            return {"success": False, "error": "Empty prompt provided"}
+
+        model = model or self.model_categories["text_generation"][0]
+        endpoint = f"models/{model}"
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_length": max_length,
+                "temperature": temperature,
+                "do_sample": True,
+                "return_full_text": True
+            }
+        }
+
+        result = self._make_request(endpoint, payload, timeout=60)
+
+        if result["success"]:
+            raw_data = result["data"]
+            if isinstance(raw_data, list) and len(raw_data) > 0:
+                generated_text = raw_data[0].get("generated_text", "")
+
+                # Clean up the generated text (remove original prompt)
+                generated_content = generated_text.replace(prompt, "").strip()
+
+                formatted_result = {
+                    "prompt": prompt,
+                    "generated_text": generated_content,
+                    "full_text": generated_text,
+                    "word_count": len(generated_content.split()),
+                    "character_count": len(generated_content),
+                    "model_used": model,
+                    "parameters": {"max_length": max_length, "temperature": temperature},
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                self.session_stats["total_tokens"] += len(generated_content.split())
+
+                return {"success": True, "data": formatted_result}
+            else:
+                return {"success": False, "error": f"Unexpected response format: {raw_data}"}
+        else:
+            return result
+
+    def summarize_text(self, text: str, model: str = None, max_length: int = 150,
+                      min_length: int = 30) -> Dict[str, Any]:
+        """
+        Summarize text using Hugging Face summarization models
+        """
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        model = model or self.model_categories["summarization"][0]
+        endpoint = f"models/{model}"
+        payload = {
+            "inputs": text,
+            "parameters": {
+                "max_length": max_length,
+                "min_length": min_length,
+                "do_sample": False
+            }
+        }
+
+        result = self._make_request(endpoint, payload)
+
+        if result["success"]:
+            raw_data = result["data"]
+            if isinstance(raw_data, list) and len(raw_data) > 0:
+                summary = raw_data[0].get("summary_text", "")
+
+                formatted_result = {
+                    "original_text": text[:500] + "..." if len(text) > 500 else text,
+                    "summary": summary,
+                    "compression_ratio": round(len(summary) / len(text), 2),
+                    "original_length": len(text),
+                    "summary_length": len(summary),
+                    "model_used": model,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                return {"success": True, "data": formatted_result}
+            else:
+                return {"success": False, "error": f"Unexpected response format: {raw_data}"}
+        else:
+            return result
+
+    def translate_text(self, text: str, source_lang: str = "en", target_lang: str = "fr") -> Dict[str, Any]:
+        """
+        Translate text between languages
+        """
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        # Find appropriate translation model
+        model_key = f"Helsinki-NLP/opus-mt-{source_lang}-{target_lang}"
+        endpoint = f"models/{model_key}"
+        payload = {"inputs": text}
+
+        result = self._make_request(endpoint, payload)
+
+        if result["success"]:
+            raw_data = result["data"]
+            if isinstance(raw_data, list) and len(raw_data) > 0:
+                translation = raw_data[0].get("translation_text", "")
+
+                formatted_result = {
+                    "original_text": text,
+                    "translated_text": translation,
+                    "source_language": source_lang,
+                    "target_language": target_lang,
+                    "model_used": model_key,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                return {"success": True, "data": formatted_result}
+            else:
+                return {"success": False, "error": f"Unexpected response format: {raw_data}"}
+        else:
+            return result
+
+    def batch_process(self, requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Process multiple requests in batch
+
+        Args:
+            requests: List of request dictionaries with 'method', 'args' keys
+
+        Returns:
+            List of results for each request
+        """
+        results = []
+
+        for req in requests:
+            method_name = req.get("method")
+            args = req.get("args", {})
+
+            if method_name == "sentiment_analysis":
+                result = self.sentiment_analysis(**args)
+            elif method_name == "generate_text":
+                result = self.generate_text(**args)
+            elif method_name == "summarize_text":
+                result = self.summarize_text(**args)
+            elif method_name == "translate_text":
+                result = self.translate_text(**args)
+            else:
+                result = {"success": False, "error": f"Unknown method: {method_name}"}
+
+            results.append(result)
+
+            # Small delay between requests to avoid rate limiting
+            time.sleep(0.1)
+
+        return results
+
+    def get_session_stats(self) -> Dict[str, Any]:
+        """
+        Get current session statistics and performance metrics
+        """
+        uptime = (datetime.now() - datetime.fromisoformat(self.session_stats["start_time"])).total_seconds()
+
+        return {
+            **self.session_stats,
+            "uptime_seconds": round(uptime, 2),
+            "success_rate": round((self.session_stats["requests_made"] - self.session_stats["errors"]) / 
+                                max(1, self.session_stats["requests_made"]) * 100, 2),
+            "avg_tokens_per_request": round(self.session_stats["total_tokens"] / 
+                                          max(1, self.session_stats["requests_made"]), 2)
+        }
+
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Check API health and connectivity
+        """
+        try:
+            # Simple test request
+            test_result = self.sentiment_analysis("test", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+
+            return {
+                "api_accessible": test_result["success"],
+                "token_valid": bool(self.token),
+                "timestamp": datetime.now().isoformat(),
+                "session_stats": self.get_session_stats()
+            }
+        except Exception as e:
+            return {
+                "api_accessible": False,
+                "token_valid": bool(self.token),
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }"

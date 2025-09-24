@@ -1,0 +1,195 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "name": "oasis-v3-ai-ecosystem",
+  "description": "OASIS v3 - Ultra-Lightweight Mobile AI Superintelligence Ecosystem ($50K+/month target)",
+  
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_HF_SPACES_URL": "@hf_spaces_url",
+      "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+      "NEXT_PUBLIC_APP_VERSION": "3.0.0",
+      "NEXT_PUBLIC_REVENUE_TARGET": "50000",
+      "NEXT_PUBLIC_MOBILE_FOOTPRINT": "5MB",
+      "NEXT_PUBLIC_ANALYTICS_ID": "@analytics_id"
+    }
+  },
+  
+  "functions": {
+    "pages/api/**/*.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "pages/api/**/*.ts": {
+      "runtime": "nodejs18.x", 
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  
+  "redirects": [
+    {
+      "source": "/demo",
+      "destination": "/#ai-processing",
+      "permanent": false
+    },
+    {
+      "source": "/revenue",
+      "destination": "/#revenue-dashboard",
+      "permanent": false
+    },
+    {
+      "source": "/termux",
+      "destination": "/#termux-setup", 
+      "permanent": false
+    },
+    {
+      "source": "/mobile",
+      "destination": "/#mobile-architecture",
+      "permanent": false
+    },
+    {
+      "source": "/api-docs",
+      "destination": "/#api-documentation",
+      "permanent": false
+    },
+    {
+      "source": "/github",
+      "destination": "https://github.com/your-username/oasis-v3",
+      "permanent": false
+    }
+  ],
+  
+  "rewrites": [
+    {
+      "source": "/api/hf/(.*)",
+      "destination": "$HF_SPACES_URL/api/$1"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    }
+  ],
+  
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection", 
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' *.vercel-analytics.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: https: *.vercel.com; connect-src 'self' *.supabase.co *.hf.space *.huggingface.co *.vercel-analytics.com; frame-ancestors 'none';"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/_next/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Requested-With"
+        }
+      ]
+    }
+  ],
+  
+  "regions": ["iad1", "sin1", "sfo1", "fra1"],
+  
+  "framework": "nextjs",
+  
+  "github": {
+    "enabled": true,
+    "autoJobCancelation": true,
+    "autoAlias": true,
+    "silent": false
+  },
+  
+  "cleanUrls": true,
+  "trailingSlash": false,
+  
+  "env": {
+    "NEXT_PUBLIC_APP_NAME": "OASIS v3 AI Ecosystem",
+    "NEXT_PUBLIC_APP_TAGLINE": "Ultra-Lightweight Mobile AI Superintelligence",
+    "NEXT_PUBLIC_REVENUE_TARGET": "50000", 
+    "NEXT_PUBLIC_MOBILE_FOOTPRINT_MB": "5",
+    "NEXT_PUBLIC_ZERO_DEPENDENCIES": "true",
+    "NEXT_PUBLIC_CLOUD_FIRST": "true",
+    "NEXT_PUBLIC_CONTACT_EMAIL": "contact@oasis-v3.com",
+    "NEXT_PUBLIC_GITHUB_REPO": "https://github.com/your-username/oasis-v3"
+  },
+  
+  "crons": [
+    {
+      "path": "/api/health-check",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/revenue-sync",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/analytics-report",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

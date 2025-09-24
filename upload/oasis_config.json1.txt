@@ -1,0 +1,29 @@
+"{
+  "hf_token": "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",
+  "endpoints": {
+    "sentiment": "https://elmatador0197-my-oasis-agent.hf.space",
+    "ai_factory": "https://your-username-oasis-ai-factory.hf.space",
+    "chat": "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+    "summarization": "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
+    "translation": "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-en-es",
+    "classification": "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-emotion"
+  },
+  "timeout": 30,
+  "retry_attempts": 3,
+  "retry_delay": 1.0,
+  "performance": {
+    "target_response_time": 0.5,
+    "max_concurrent_requests": 5,
+    "cache_enabled": false
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "oasis_orchestrator.log",
+    "max_size_mb": 10
+  },
+  "business": {
+    "revenue_tracking": true,
+    "client_metrics": true,
+    "usage_analytics": true
+  }
+}"

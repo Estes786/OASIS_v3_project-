@@ -1,0 +1,429 @@
+"# OASIS v3 API Documentation
+
+## ðŸ“‹ Overview
+
+The OASIS v3 API provides a simple, REST-like interface for accessing AI capabilities through the mobile-first orchestrator. All communication happens via HTTP/HTTPS using standard JSON payloads.
+
+## ðŸ—ï¸ Architecture
+
+```
+Termux Device â”€â”€HTTPâ”€â”€â–º HuggingFace Spaces â”€â”€AI Modelsâ”€â”€â–º Response
+     â”‚                        â”‚
+     â”‚                        â”œâ”€â”€ Sentiment Analysis
+     â”‚                        â”œâ”€â”€ Translation  
+     â”‚                        â”œâ”€â”€ Summarization
+     â”‚                        â”œâ”€â”€ Text Generation
+     â”‚                        â””â”€â”€ Emotion Analysis
+     â”‚
+  Pure Python              Full ML Stack
+  + urllib only           + GPU Processing
+```
+
+## ðŸ”§ Orchestrator API
+
+### OASISOrchestrator Class
+
+#### Initialization
+
+```python
+from oasis_orchestrator import OASISOrchestrator
+
+# Initialize with config file
+orchestrator = OASISOrchestrator("oasis_config.json")
+
+# Initialize with custom config
+config = {
+    "hugging_face": {
+        "token": "hf_your_token",
+        "endpoints": {...}
+    }
+}
+orchestrator = OASISOrchestrator(config)
+```
+
+#### Core Methods
+
+##### `make_request(url, data=None, method="GET", headers=None)`
+
+Low-level HTTP request method using pure urllib.
+
+**Parameters:**
+- `url` (str): Target URL
+- `data` (bytes, optional): Request payload
+- `method` (str): HTTP method ("GET", "POST", "PUT", "DELETE")
+- `headers` (dict, optional): HTTP headers
+
+**Returns:** Response text or None on error
+
+**Example:**
+```python
+# GET request
+response = orchestrator.make_request("https://api.example.com/data")
+
+# POST request with JSON
+import json
+payload = json.dumps({"text": "Hello world"}).encode('utf-8')
+response = orchestrator.make_request(
+    "https://api.example.com/process",
+    data=payload,
+    method="POST",
+    headers={"Content-Type": "application/json"}
+)
+```
+
+##### `analyze_sentiment(text)`
+
+Analyze sentiment of input text.
+
+**Parameters:**
+- `text` (str): Text to analyze
+
+**Returns:** Sentiment analysis result (str/dict)
+
+**Example:**
+```python
+result = orchestrator.analyze_sentiment("I love this product!")
+print(f"Sentiment: {result}")
+# Output: Sentiment: {"label": "POSITIVE", "score": 0.9998}
+```
+
+##### `translate_text(text, target_language="english", source_language="auto")`
+
+Translate text between languages.
+
+**Parameters:**
+- `text` (str): Text to translate
+- `target_language` (str): Target language name
+- `source_language` (str): Source language ("auto" for detection)
+
+**Returns:** Translated text (str)
+
+**Example:**
+```python
+translation = orchestrator.translate_text("Hola mundo", "english")
+print(f"Translation: {translation}")
+# Output: Translation: Hello world
+```
+
+##### `summarize_text(text, max_length=150)`
+
+Generate text summary.
+
+**Parameters:**
+- `text` (str): Text to summarize
+- `max_length` (int): Maximum summary length
+
+**Returns:** Summary text (str)
+
+**Example:**
+```python
+long_text = "Long article content here..."
+summary = orchestrator.summarize_text(long_text, max_length=100)
+print(f"Summary: {summary}")
+```
+
+##### `generate_text(prompt, max_length=100)`
+
+Generate text based on prompt.
+
+**Parameters:**
+- `prompt` (str): Text prompt
+- `max_length` (int): Maximum generated length
+
+**Returns:** Generated text (str)
+
+**Example:**
+```python
+generated = orchestrator.generate_text("The future of AI is", max_length=50)
+print(f"Generated: {generated}")
+```
+
+##### `analyze_emotion(text)`
+
+Detect emotions in text.
+
+**Parameters:**
+- `text` (str): Text to analyze
+
+**Returns:** Emotion analysis result (str/dict)
+
+**Example:**
+```python
+emotion = orchestrator.analyze_emotion("I'm so excited about this!")
+print(f"Emotion: {emotion}")
+# Output: Emotion: {"label": "joy", "score": 0.95}
+```
+
+##### `run_interactive()`
+
+Start interactive CLI mode.
+
+**Example:**
+```python
+orchestrator.run_interactive()
+# Starts interactive command-line interface
+```
+
+## ðŸŒ HuggingFace Spaces API
+
+### Endpoints
+
+The HF Spaces application exposes these endpoints:
+
+#### POST `/predict_sentiment`
+```json
+{
+  "text": "I love this product!"
+}
+```
+
+#### POST `/predict_translate`
+```json
+{
+  "text": "Hello world",
+  "target_language": "spanish"
+}
+```
+
+#### POST `/predict_summarize`
+```json
+{
+  "text": "Long text content...",
+  "max_length": 150
+}
+```
+
+#### POST `/predict_generate`
+```json
+{
+  "prompt": "The future of AI is",
+  "max_length": 100
+}
+```
+
+#### POST `/predict_emotion`
+```json
+{
+  "text": "I'm feeling great today!"
+}
+```
+
+### Response Format
+
+All endpoints return JSON responses:
+
+```json
+{
+  "result": "Processed output here",
+  "status": "success",
+  "processing_time": 0.245
+}
+```
+
+Error responses:
+```json
+{
+  "error": "Error description",
+  "status": "error",
+  "code": 400
+}
+```
+
+## âš™ï¸ Configuration
+
+### Config File Structure
+
+```json
+{
+  "hugging_face": {
+    "token": "hf_your_huggingface_token",
+    "base_url": "https://your-space.hf.space",
+    "endpoints": {
+      "sentiment": "https://your-space.hf.space/predict_sentiment",
+      "translate": "https://your-space.hf.space/predict_translate", 
+      "summarize": "https://your-space.hf.space/predict_summarize",
+      "generate": "https://your-space.hf.space/predict_generate",
+      "emotion": "https://your-space.hf.space/predict_emotion"
+    }
+  },
+  "performance": {
+    "timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 1.0
+  },
+  "business": {
+    "api_version": "v1",
+    "rate_limit": 100,
+    "debug_mode": false
+  }
+}
+```
+
+### Environment Variables
+
+```bash
+# Optional environment overrides
+export OASIS_DEBUG=1              # Enable debug mode
+export OASIS_CONFIG=/path/config  # Custom config path
+export HF_TOKEN=hf_your_token     # Override HF token
+```
+
+## ðŸ”’ Authentication
+
+### HuggingFace Token
+
+1. Create account at [HuggingFace](https://huggingface.co)
+2. Go to Settings â†’ Access Tokens
+3. Create new token with appropriate permissions
+4. Add token to config file
+
+```json
+{
+  "hugging_face": {
+    "token": "hf_your_token_here"
+  }
+}
+```
+
+## ðŸš¨ Error Handling
+
+### Common Error Codes
+
+| Code | Description | Solution |
+|------|-------------|----------|
+| 401 | Invalid/missing HF token | Check token in config |
+| 403 | Insufficient permissions | Verify token permissions |
+| 429 | Rate limit exceeded | Implement retry logic |
+| 500 | Server error | Check HF Spaces status |
+| 503 | Service unavailable | Wait and retry |
+
+### Error Handling Example
+
+```python
+try:
+    result = orchestrator.analyze_sentiment("Test text")
+    if result:
+        print(f"Success: {result}")
+    else:
+        print("Request failed - check logs")
+except Exception as e:
+    print(f"Error: {e}")
+    # Implement retry logic or fallback
+```
+
+## ðŸ“Š Performance Optimization
+
+### Best Practices
+
+1. **Batch Requests**: Group multiple operations when possible
+2. **Caching**: Cache frequent results locally
+3. **Timeout Management**: Set appropriate timeouts for mobile
+4. **Error Recovery**: Implement exponential backoff
+5. **Resource Management**: Monitor memory and battery usage
+
+### Example Batch Processing
+
+```python
+texts = ["Text 1", "Text 2", "Text 3"]
+results = []
+
+for text in texts:
+    try:
+        result = orchestrator.analyze_sentiment(text)
+        results.append(result)
+    except Exception as e:
+        print(f"Failed for '{text}': {e}")
+        results.append(None)
+
+print(f"Processed {len([r for r in results if r])} out of {len(texts)}")
+```
+
+## ðŸ”§ Testing
+
+### API Testing
+
+```python
+# Test basic connectivity
+response = orchestrator.make_request("https://httpbin.org/get")
+assert response is not None
+
+# Test sentiment analysis
+sentiment = orchestrator.analyze_sentiment("Great product!")
+assert sentiment is not None
+
+# Test with invalid input
+result = orchestrator.analyze_sentiment("")
+# Should handle gracefully
+```
+
+### Integration Testing
+
+```bash
+# Run comprehensive tests
+python test_integration.py
+
+# Test specific functionality
+python -c "from oasis_orchestrator import OASISOrchestrator; o = OASISOrchestrator(); print(o.analyze_sentiment('test'))"
+```
+
+## ðŸ“± Mobile Considerations
+
+### Termux-Specific Features
+
+- **Pure Python**: No compiled dependencies
+- **Lightweight**: Minimal memory footprint
+- **Battery Efficient**: Optimized for mobile power management
+- **Offline Capable**: Local processing where possible
+
+### Network Optimization
+
+```python
+# Configure for mobile networks
+config = {
+    "performance": {
+        "timeout": 15,        # Shorter timeout for mobile
+        "retry_attempts": 2,  # Fewer retries to save battery
+        "retry_delay": 0.5   # Faster retry for better UX
+    }
+}
+```
+
+## ðŸ› ï¸ Troubleshooting
+
+### Common Issues
+
+1. **"Module not found"**
+   - Verify pure Python environment
+   - Check termux_requirements.txt
+
+2. **"Connection timeout"**
+   - Check internet connectivity
+   - Verify HF Spaces URL
+
+3. **"Invalid token"**
+   - Regenerate HF token
+   - Check token permissions
+
+### Debug Mode
+
+```python
+# Enable detailed logging
+import os
+os.environ['OASIS_DEBUG'] = '1'
+
+orchestrator = OASISOrchestrator("oasis_config.json")
+# Will now print detailed request/response info
+```
+
+## ðŸ“š Examples
+
+See the `/examples` directory for complete usage examples:
+
+- `basic_usage.py` - Simple API calls
+- `batch_processing.py` - Handling multiple requests  
+- `error_handling.py` - Robust error management
+- `mobile_optimization.py` - Termux-specific optimizations
+
+---
+
+*For more help, see [README.md](README.md) or open an issue on GitHub.*"

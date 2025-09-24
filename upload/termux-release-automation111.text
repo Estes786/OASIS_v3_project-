@@ -1,0 +1,297 @@
+name: 📱 Termux Orchestrator Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'stable'
+        type: choice
+        options: ['stable', 'beta', 'alpha']
+
+env:
+  PACKAGE_NAME: oasis-v3-termux
+  MIN_PYTHON_VERSION: "3.8"
+
+jobs:
+  validate_termux_constraints:
+    name: ✅ Validate Ultra-Lightweight Constraints
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.MIN_PYTHON_VERSION }}
+
+      - name: 🔍 Validate Zero Dependencies
+        run: |
+          echo "🔍 Checking Termux orchestrator constraints..."
+
+          # Check that only stdlib imports are used
+          python scripts/ci/validate_termux_dependencies.py             --source-dir termux/             --allowed-stdlib-only             --max-footprint-mb 5
+
+          # Verify no heavy ML libraries
+          python scripts/ci/check_forbidden_imports.py             --source-dir termux/             --forbidden "numpy,pandas,torch,tensorflow,sklearn,gradio"
+
+      - name: 📏 Size Validation
+        run: |
+          # Calculate total package size
+          TOTAL_SIZE=$(du -sb termux/ | cut -f1)
+          TOTAL_SIZE_MB=$((TOTAL_SIZE / 1024 / 1024))
+
+          echo "📦 Termux package size: ${TOTAL_SIZE_MB}MB"
+
+          if [ $TOTAL_SIZE_MB -gt 5 ]; then
+            echo "❌ Package exceeds 5MB limit: ${TOTAL_SIZE_MB}MB"
+            exit 1
+          fi
+
+          echo "✅ Size constraint satisfied: ${TOTAL_SIZE_MB}MB < 5MB"
+
+      - name: 🧪 Test Core Functionality
+        run: |
+          cd termux/
+          python -m pytest tests/ -v --tb=short
+
+          # Test API connectivity (mock)
+          python tests/test_hf_api_connection.py --mock
+
+          # Test orchestration logic
+          python tests/test_orchestrator_core.py
+
+  build_package:
+    name: 📦 Build Distribution Package
+    needs: validate_termux_constraints
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      package_path: ${{ steps.build.outputs.package_path }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Determine Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📋 Building version: $VERSION"
+
+      - name: 📋 Prepare Package
+        run: |
+          mkdir -p dist/
+
+          # Create distribution directory
+          DIST_DIR="dist/${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}"
+          mkdir -p "$DIST_DIR"
+
+          # Copy core files
+          cp -r termux/* "$DIST_DIR/"
+
+          # Generate version file
+          echo "${{ steps.version.outputs.version }}" > "$DIST_DIR/VERSION"
+
+          # Create installation metadata
+          cat > "$DIST_DIR/INSTALL_INFO.json" << EOF
+          {
+            "package": "${{ env.PACKAGE_NAME }}",
+            "version": "${{ steps.version.outputs.version }}",
+            "min_python": "${{ env.MIN_PYTHON_VERSION }}",
+            "architecture": "ultra-lightweight",
+            "footprint_mb": $(du -sb "$DIST_DIR" | cut -f1 | awk '{print $1/1024/1024}'),
+            "dependencies": ["python-stdlib-only"],
+            "platforms": ["termux", "linux", "android"],
+            "build_date": "$(date -Iseconds)"
+          }
+          EOF
+
+      - name: 🔨 Build Package
+        id: build
+        run: |
+          DIST_DIR="dist/${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}"
+          PACKAGE_FILE="${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}.tar.gz"
+
+          # Create compressed package
+          cd dist/
+          tar -czf "$PACKAGE_FILE" "${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}/"
+
+          # Generate checksums
+          sha256sum "$PACKAGE_FILE" > "$PACKAGE_FILE.sha256"
+          md5sum "$PACKAGE_FILE" > "$PACKAGE_FILE.md5"
+
+          echo "package_path=dist/$PACKAGE_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Package built: $PACKAGE_FILE"
+
+      - name: 📊 Package Statistics
+        run: |
+          PACKAGE_FILE="dist/${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}.tar.gz"
+          PACKAGE_SIZE=$(stat -f%z "$PACKAGE_FILE" 2>/dev/null || stat -c%s "$PACKAGE_FILE")
+          PACKAGE_SIZE_MB=$((PACKAGE_SIZE / 1024 / 1024))
+
+          echo "📦 Final package statistics:" >> $GITHUB_STEP_SUMMARY
+          echo "- Size: ${PACKAGE_SIZE_MB}MB" >> $GITHUB_STEP_SUMMARY
+          echo "- Compressed: $(ls -lh dist/*.tar.gz)" >> $GITHUB_STEP_SUMMARY
+
+      - name: 💾 Upload Package Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: termux-package-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/*.md5
+
+  test_android_compatibility:
+    name: 🤖 Test Android Compatibility
+    needs: [build_package]
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        android_api: [28, 30, 33]  # Android 9, 11, 13
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 💾 Download Package
+        uses: actions/download-artifact@v3
+        with:
+          name: termux-package-${{ needs.build_package.outputs.version }}
+          path: dist/
+
+      - name: 🤖 Setup Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.android_api }}
+          target: google_apis
+          arch: x86_64
+          script: |
+            echo "🤖 Testing on Android API ${{ matrix.android_api }}"
+
+            # Install Termux (simulation)
+            python scripts/ci/simulate_termux_install.py               --package "dist/${{ env.PACKAGE_NAME }}-${{ needs.build_package.outputs.version }}.tar.gz"               --android-api ${{ matrix.android_api }}
+
+  create_release:
+    name: 🚀 Create GitHub Release
+    needs: [build_package, test_android_compatibility]
+    runs-on: ubuntu-latest
+    if: always() && needs.build_package.result == 'success'
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 💾 Download Package
+        uses: actions/download-artifact@v3
+        with:
+          name: termux-package-${{ needs.build_package.outputs.version }}
+          path: dist/
+
+      - name: 📋 Generate Release Notes
+        id: release_notes
+        run: |
+          python scripts/ci/generate_release_notes.py             --version "${{ needs.build_package.outputs.version }}"             --output release_notes.md
+
+          echo "release_notes_path=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.build_package.outputs.version }}
+          release_name: "OASIS v3 Termux Orchestrator ${{ needs.build_package.outputs.version }}"
+          body_path: ${{ steps.release_notes.outputs.release_notes_path }}
+          draft: false
+          prerelease: ${{ github.event.inputs.release_type != 'stable' }}
+
+      - name: 📤 Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/${{ env.PACKAGE_NAME }}-${{ needs.build_package.outputs.version }}.tar.gz
+          asset_name: ${{ env.PACKAGE_NAME }}-${{ needs.build_package.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: 📤 Upload Checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/${{ env.PACKAGE_NAME }}-${{ needs.build_package.outputs.version }}.tar.gz.sha256
+          asset_name: ${{ env.PACKAGE_NAME }}-${{ needs.build_package.outputs.version }}.tar.gz.sha256
+          asset_content_type: text/plain
+
+  update_distribution:
+    name: 📦 Update Distribution Channels
+    needs: [create_release]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Update Package Index
+        run: |
+          python scripts/ci/update_package_index.py             --version "${{ needs.build_package.outputs.version }}"             --release-url "${{ needs.create_release.outputs.html_url }}"
+
+      - name: 🌐 Update Installation Scripts
+        run: |
+          # Update one-liner installation script
+          python scripts/ci/update_install_script.py             --latest-version "${{ needs.build_package.outputs.version }}"             --output scripts/install.sh
+
+      - name: 📋 Update Documentation
+        run: |
+          python scripts/ci/update_termux_docs.py             --version "${{ needs.build_package.outputs.version }}"             --docs-dir docs/termux/
+
+      - name: 💾 Commit Updates
+        run: |
+          git config --local user.email "oasis-bot@github.com"
+          git config --local user.name "OASIS v3 Release Bot"
+          git add .
+          git commit -m "📦 Update distribution for ${{ needs.build_package.outputs.version }}" || exit 0
+          git push
+
+  notify_channels:
+    name: 📢 Notify Release Channels
+    needs: [create_release, update_distribution]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📱 Telegram Notification
+        if: success()
+        run: |
+          python scripts/ci/send_telegram_notification.py             --message "🚀 OASIS v3 Termux Orchestrator ${{ needs.build_package.outputs.version }} released!"             --release-url "${{ needs.create_release.outputs.html_url }}"             --token "${{ secrets.TELEGRAM_BOT_TOKEN }}"             --chat-id "${{ secrets.TELEGRAM_CHAT_ID }}"
+
+      - name: 🐦 Twitter Announcement
+        if: success()
+        run: |
+          python scripts/ci/tweet_release.py             --version "${{ needs.build_package.outputs.version }}"             --release-url "${{ needs.create_release.outputs.html_url }}"             --api-key "${{ secrets.TWITTER_API_KEY }}"             --api-secret "${{ secrets.TWITTER_API_SECRET }}"
+
+      - name: 📧 Email Notifications
+        if: success()
+        run: |
+          python scripts/ci/send_release_email.py             --version "${{ needs.build_package.outputs.version }}"             --release-notes-path "${{ steps.release_notes.outputs.release_notes_path }}"             --smtp-config "${{ secrets.SMTP_CONFIG }}"

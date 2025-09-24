@@ -1,0 +1,665 @@
+# OASIS v3 API Documentation
+
+## 🚀 Overview
+
+OASIS v3 provides a comprehensive AI processing API optimized for Termux orchestration and cloud-scale operations. The API supports multiple AI modalities including text generation, image classification, sentiment analysis, and multimodal processing.
+
+### Base URL
+```
+https://your-space.hf.space/api/v3/
+```
+
+### Authentication
+All API endpoints require authentication using the `X-API-Key` header or `Authorization: Bearer` header.
+
+```bash
+curl -H "Authorization: Bearer your_api_key_here" \
+     https://your-space.hf.space/api/v3/status
+```
+
+---
+
+## 📋 Table of Contents
+
+1. [Authentication](#authentication)
+2. [Text Processing](#text-processing)
+3. [Image Processing](#image-processing)
+4. [Business APIs](#business-apis)
+5. [System APIs](#system-apis)
+6. [Termux Optimization](#termux-optimization)
+7. [Response Formats](#response-formats)
+8. [Error Handling](#error-handling)
+9. [Rate Limiting](#rate-limiting)
+10. [Examples](#examples)
+
+---
+
+## 🔐 Authentication
+
+### API Key Authentication
+
+**Header**: `Authorization: Bearer YOUR_API_KEY`
+
+**Alternative**: `X-API-Key: YOUR_API_KEY`
+
+### Termux Specific Authentication
+
+For ultra-lightweight Termux requests, use the special Termux API key:
+
+**Header**: `X-Termux-API-Key: YOUR_TERMUX_KEY`
+
+---
+
+## 📝 Text Processing
+
+### 1. Text Generation
+
+Generate human-like text using advanced language models.
+
+**Endpoint**: `POST /api/v3/text/generate`
+
+**Parameters**:
+```json
+{
+  "prompt": "The future of AI is",
+  "model": "microsoft/DialoGPT-large",
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "top_p": 0.9
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "generated_text": "The future of AI is bright and full of possibilities...",
+  "model_used": "microsoft/DialoGPT-large",
+  "parameters": {
+    "max_tokens": 512,
+    "temperature": 0.7,
+    "top_p": 0.9
+  },
+  "metadata": {
+    "prompt_length": 17,
+    "generated_length": 45,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Available Models**:
+- `microsoft/DialoGPT-large` (default)
+- `gpt2`
+- `facebook/blenderbot-400M-distill`
+
+### 2. Sentiment Analysis
+
+Analyze emotions and sentiment in text.
+
+**Endpoint**: `POST /api/v3/text/sentiment`
+
+**Parameters**:
+```json
+{
+  "text": "I love this new technology!",
+  "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+  "return_all_scores": true
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "classifications": [
+    {"label": "POSITIVE", "score": 0.9234},
+    {"label": "NEUTRAL", "score": 0.0543},
+    {"label": "NEGATIVE", "score": 0.0223}
+  ],
+  "predicted_class": "POSITIVE",
+  "confidence": 0.9234,
+  "metadata": {
+    "text_length": 27,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### 3. Question Answering
+
+Answer questions based on provided context.
+
+**Endpoint**: `POST /api/v3/text/qa`
+
+**Parameters**:
+```json
+{
+  "question": "What is the main benefit of AI?",
+  "context": "Artificial Intelligence provides automation, efficiency, and enhanced decision-making capabilities to businesses and individuals.",
+  "model": "deepset/roberta-base-squad2"
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "answer": {
+    "answer": "automation, efficiency, and enhanced decision-making",
+    "score": 0.8756,
+    "start": 45,
+    "end": 89
+  },
+  "confidence": 0.8756,
+  "metadata": {
+    "question_length": 32,
+    "context_length": 134,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### 4. Text Summarization
+
+Summarize long text content.
+
+**Endpoint**: `POST /api/v3/text/summarize`
+
+**Parameters**:
+```json
+{
+  "text": "Very long text content to be summarized...",
+  "model": "facebook/bart-large-cnn",
+  "max_length": 150,
+  "min_length": 30
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "summary": "This is a concise summary of the provided text content.",
+  "parameters": {
+    "max_length": 150,
+    "min_length": 30
+  },
+  "metadata": {
+    "original_length": 245,
+    "summary_length": 12,
+    "compression_ratio": 20.4,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+## 🖼️ Image Processing
+
+### 1. Image Classification
+
+Classify images using state-of-the-art vision models.
+
+**Endpoint**: `POST /api/v3/image/classify`
+
+**Parameters**:
+```json
+{
+  "image_data": "base64_encoded_image_data_here",
+  "model": "google/vit-base-patch16-224"
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "classifications": [
+    {"label": "cat", "score": 0.8967},
+    {"label": "dog", "score": 0.0876},
+    {"label": "animal", "score": 0.0157}
+  ],
+  "top_prediction": {"label": "cat", "score": 0.8967},
+  "confidence_scores": [0.8967, 0.0876, 0.0157],
+  "metadata": {
+    "image_size": [224, 224],
+    "image_mode": "RGB",
+    "num_classes": 3,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+## 💼 Business APIs
+
+### 1. Get Business Metrics
+
+Retrieve comprehensive business metrics and KPIs.
+
+**Endpoint**: `GET /api/v3/business/metrics`
+
+**Response**:
+```json
+{
+  "status": "success",
+  "business_metrics": {
+    "total_requests": 1250,
+    "successful_operations": 1187,
+    "revenue_generated": 45.67,
+    "active_sessions": 23,
+    "conversion_rate": 0.045
+  },
+  "kpis": {
+    "revenue_per_request": 0.0365,
+    "success_rate": 0.9496,
+    "monthly_projection": 1370.10
+  }
+}
+```
+
+### 2. Revenue Analysis
+
+Get detailed revenue analytics and optimization suggestions.
+
+**Endpoint**: `GET /api/v3/business/revenue`
+
+**Response**:
+```json
+{
+  "status": "success",
+  "revenue_data": {
+    "current_revenue": 45.67,
+    "revenue_rate": 0.025,
+    "projected_monthly": 1370.10
+  },
+  "optimization_suggestions": [
+    "Enable premium tier features",
+    "Implement dynamic pricing",
+    "Launch enterprise partnerships"
+  ]
+}
+```
+
+---
+
+## ⚙️ System APIs
+
+### 1. System Status
+
+Get comprehensive system health and performance metrics.
+
+**Endpoint**: `GET /api/v3/status`
+
+**Response**:
+```json
+{
+  "status": "operational",
+  "version": "3.0.0",
+  "metrics": {
+    "total_requests": 1250,
+    "successful_operations": 1187,
+    "uptime": "2024-01-15T10:30:00Z"
+  },
+  "endpoints_available": [
+    "/api/v3/text/generate",
+    "/api/v3/image/classify",
+    "/api/v3/text/sentiment",
+    "/api/v3/text/qa",
+    "/api/v3/text/summarize"
+  ]
+}
+```
+
+### 2. Health Check
+
+Simple health check endpoint (no authentication required).
+
+**Endpoint**: `GET /api/v3/health`
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "version": "3.0.0",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+---
+
+## 📱 Termux Optimization
+
+### Ultra-Lightweight Endpoints
+
+Special endpoints optimized for Termux with minimal bandwidth usage.
+
+### 1. Termux AI Processing
+
+**Endpoint**: `POST /termux/ai/{operation}`
+
+Where `{operation}` can be: `text/generate`, `text/sentiment`, `text/qa`, `text/summarize`, `image/classify`
+
+**Headers**:
+```
+X-Termux-API-Key: your_termux_key
+Content-Type: application/json
+```
+
+**Example**:
+```bash
+curl -X POST \
+  -H "X-Termux-API-Key: your_termux_key" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello AI","max_tokens":50}' \
+  https://your-space.hf.space/termux/ai/text/generate
+```
+
+**Response** (optimized for minimal size):
+```json
+{
+  "status": "success",
+  "generated_text": "Hello! How can I assist you today?",
+  "gateway_metadata": {
+    "response_time_ms": 234,
+    "payload_size_bytes": 45,
+    "termux_optimized": true
+  }
+}
+```
+
+### 2. Batch Processing
+
+Process multiple requests in a single call to minimize network overhead.
+
+**Endpoint**: `POST /termux/batch`
+
+**Parameters**:
+```json
+{
+  "requests": [
+    {
+      "id": "req1",
+      "endpoint": "/ai/text/generate",
+      "payload": {"prompt": "Hello", "max_tokens": 20},
+      "method": "POST"
+    },
+    {
+      "id": "req2", 
+      "endpoint": "/ai/text/sentiment",
+      "payload": {"text": "I love AI!"},
+      "method": "POST"
+    }
+  ]
+}
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "batch_size": 2,
+  "results": [
+    {
+      "request_id": "req1",
+      "result": {"status": "success", "generated_text": "Hello there!"}
+    },
+    {
+      "request_id": "req2",
+      "result": {"status": "success", "predicted_class": "POSITIVE"}
+    }
+  ]
+}
+```
+
+---
+
+## 📋 Response Formats
+
+### Success Response
+```json
+{
+  "status": "success",
+  "data": {},
+  "metadata": {
+    "timestamp": "2024-01-15T10:30:00Z",
+    "processing_time_ms": 234,
+    "model_used": "model_name"
+  }
+}
+```
+
+### Error Response
+```json
+{
+  "status": "error",
+  "error": "Error description",
+  "error_code": "INVALID_INPUT",
+  "metadata": {
+    "timestamp": "2024-01-15T10:30:00Z",
+    "request_id": "req_12345"
+  }
+}
+```
+
+---
+
+## ⚠️ Error Handling
+
+### Common Error Codes
+
+| Code | Description |
+|------|-------------|
+| `INVALID_INPUT` | Input parameters are invalid |
+| `AUTHENTICATION_FAILED` | API key is invalid or missing |
+| `RATE_LIMIT_EXCEEDED` | Too many requests |
+| `MODEL_ERROR` | AI model processing error |
+| `INTERNAL_ERROR` | Server internal error |
+
+### Example Error Response
+```json
+{
+  "status": "error",
+  "error": "Invalid model specified",
+  "error_code": "INVALID_INPUT",
+  "details": {
+    "parameter": "model",
+    "received": "invalid_model",
+    "expected": ["microsoft/DialoGPT-large", "gpt2"]
+  }
+}
+```
+
+---
+
+## 🚦 Rate Limiting
+
+### Default Limits
+- **Free Tier**: 100 requests/hour
+- **Basic Tier**: 1,000 requests/hour  
+- **Premium Tier**: 10,000 requests/hour
+- **Enterprise**: Unlimited
+
+### Rate Limit Headers
+```
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1642248600
+```
+
+---
+
+## 💡 Examples
+
+### Python Client Example
+
+```python
+import requests
+import json
+
+class OasisClient:
+    def __init__(self, api_key, base_url="https://your-space.hf.space"):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.headers = {"Authorization": f"Bearer {api_key}"}
+    
+    def generate_text(self, prompt, max_tokens=512):
+        response = requests.post(
+            f"{self.base_url}/api/v3/text/generate",
+            headers=self.headers,
+            json={
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": 0.7
+            }
+        )
+        return response.json()
+    
+    def classify_image(self, image_data):
+        response = requests.post(
+            f"{self.base_url}/api/v3/image/classify", 
+            headers=self.headers,
+            json={"image_data": image_data}
+        )
+        return response.json()
+
+# Usage
+client = OasisClient("your_api_key")
+result = client.generate_text("The future of AI is")
+print(result["generated_text"])
+```
+
+### Termux Ultra-Lightweight Client
+
+```python
+# Ultra-lightweight client for Termux (minimal dependencies)
+import urllib.request
+import urllib.parse
+import json
+
+def termux_request(endpoint, payload, termux_key):
+    data = json.dumps(payload).encode('utf-8')
+    
+    req = urllib.request.Request(
+        f"https://your-space.hf.space/termux/{endpoint}",
+        data=data,
+        headers={
+            'X-Termux-API-Key': termux_key,
+            'Content-Type': 'application/json'
+        }
+    )
+    
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+# Usage in Termux
+result = termux_request(
+    "ai/text/generate",
+    {"prompt": "Hello AI", "max_tokens": 50},
+    "your_termux_key"
+)
+print(result["generated_text"])
+```
+
+### cURL Examples
+
+```bash
+# Text Generation
+curl -X POST \
+  -H "Authorization: Bearer your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello world","max_tokens":100}' \
+  https://your-space.hf.space/api/v3/text/generate
+
+# Sentiment Analysis  
+curl -X POST \
+  -H "Authorization: Bearer your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"I love this API!"}' \
+  https://your-space.hf.space/api/v3/text/sentiment
+
+# System Status
+curl -H "Authorization: Bearer your_api_key" \
+  https://your-space.hf.space/api/v3/status
+
+# Termux Optimized Request
+curl -X POST \
+  -H "X-Termux-API-Key: your_termux_key" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Amazing technology"}' \
+  https://your-space.hf.space/termux/ai/text/sentiment
+```
+
+---
+
+## 🎯 Best Practices
+
+### 1. For Termux Users
+- Use `/termux/*` endpoints for optimized performance
+- Batch multiple requests when possible
+- Cache results locally to minimize requests
+- Use compression headers
+
+### 2. For Production Applications
+- Implement proper error handling
+- Use exponential backoff for retries
+- Monitor rate limits
+- Cache responses when appropriate
+
+### 3. Performance Optimization
+- Choose appropriate model sizes
+- Set reasonable token limits
+- Use async requests for multiple operations
+- Implement request pooling
+
+---
+
+## 🔄 Webhooks (Future Feature)
+
+OASIS v3 will support webhooks for real-time notifications:
+
+```json
+{
+  "webhook_url": "https://your-app.com/oasis-webhook",
+  "events": ["request_completed", "error_occurred", "quota_exceeded"],
+  "secret": "your_webhook_secret"
+}
+```
+
+---
+
+## 📊 SDKs and Libraries
+
+### Official SDKs (Coming Soon)
+- Python SDK
+- JavaScript/Node.js SDK
+- Termux Native Package
+- React Native Component
+
+### Community Libraries
+- CLI tools for Termux
+- Browser extensions
+- Mobile apps
+
+---
+
+## 🆘 Support
+
+### Documentation
+- Full API Reference: [https://docs.oasis-v3.com](https://docs.oasis-v3.com)
+- Interactive API Explorer: [https://api.oasis-v3.com](https://api.oasis-v3.com)
+
+### Community
+- GitHub: [https://github.com/oasis-v3/api](https://github.com/oasis-v3/api)
+- Discord: [https://discord.gg/oasis-v3](https://discord.gg/oasis-v3)
+
+### Commercial Support
+- Enterprise Support: enterprise@oasis-v3.com
+- Technical Issues: support@oasis-v3.com
+
+---
+
+**OASIS v3** - Revolutionizing AI with Ultra-Lightweight Architecture 🚀

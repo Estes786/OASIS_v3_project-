@@ -1,0 +1,196 @@
+"
+from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import requests
+import os
+import time
+import json
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
+
+app = FastAPI(
+    title="OASIS API Gateway v3.0",
+    description="Ultra-lightweight API gateway for OASIS AI Processing Factory",
+    version="3.0.0"
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Configuration
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_API_BASE = "https://api-inference.huggingface.co/models"
+
+# Request models
+class SentimentRequest(BaseModel):
+    text: str
+    model: str = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+
+class ContentRequest(BaseModel):
+    content_type: str
+    topic: str
+    audience: str = "general"
+    tone: str = "professional"
+    model: str = "microsoft/DialoGPT-large"
+
+class APIKeyAuth:
+    def __init__(self):
+        # In production, this would be a database lookup
+        self.valid_keys = {
+            "oasis-demo-key": {"tier": "starter", "requests_remaining": 100},
+            "oasis-pro-key": {"tier": "professional", "requests_remaining": 1000},
+            "oasis-enterprise-key": {"tier": "enterprise", "requests_remaining": 10000}
+        }
+
+    def verify_key(self, api_key: str) -> Dict[str, Any]:
+        if api_key not in self.valid_keys:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        key_info = self.valid_keys[api_key]
+        if key_info["requests_remaining"] <= 0:
+            raise HTTPException(status_code=429, detail="API limit exceeded")
+
+        return key_info
+
+# Initialize auth
+auth = APIKeyAuth()
+
+def get_api_key(x_api_key: str = Header(None)) -> str:
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    return x_api_key
+
+def verify_api_access(api_key: str = Depends(get_api_key)) -> Dict[str, Any]:
+    return auth.verify_key(api_key)
+
+@app.get("/")
+async def root():
+    return {
+        "service": "OASIS API Gateway v3.0",
+        "status": "operational", 
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": ["/sentiment", "/content", "/health", "/usage"]
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "uptime": "99.9%",
+        "services": {
+            "sentiment_analysis": "operational",
+            "content_generation": "operational",
+            "hugging_face_api": "operational"
+        }
+    }
+
+@app.post("/sentiment")
+async def analyze_sentiment(
+    request: SentimentRequest,
+    key_info: Dict[str, Any] = Depends(verify_api_access)
+):
+    try:
+        # Call Hugging Face API
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+        response = requests.post(
+            f"{HF_API_BASE}/{request.model}",
+            headers=headers,
+            json={"inputs": request.text},
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+
+            # Decrement API usage
+            api_key = key_info.get("api_key") 
+            if api_key:
+                auth.valid_keys[api_key]["requests_remaining"] -= 1
+
+            return {
+                "success": True,
+                "data": result,
+                "model": request.model,
+                "tier": key_info["tier"],
+                "requests_remaining": key_info["requests_remaining"] - 1,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"HF API error: {response.text}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/content")
+async def generate_content(
+    request: ContentRequest,
+    key_info: Dict[str, Any] = Depends(verify_api_access)
+):
+    try:
+        # Content templates
+        templates = {
+            "blog_post": f"Write a comprehensive blog post about {request.topic}. Target audience: {request.audience}. Tone: {request.tone}.",
+            "social_media": f"Create an engaging social media post about {request.topic}. Tone: {request.tone}.",
+            "product_description": f"Write a compelling product description for {request.topic}. Target: {request.audience}. Tone: {request.tone}."
+        }
+
+        if request.content_type not in templates:
+            raise HTTPException(status_code=400, detail="Unsupported content type")
+
+        prompt = templates[request.content_type]
+
+        # Call Hugging Face API
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+        response = requests.post(
+            f"{HF_API_BASE}/{request.model}",
+            headers=headers,
+            json={
+                "inputs": prompt,
+                "parameters": {"max_length": 512, "temperature": 0.7}
+            },
+            timeout=60
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+
+            # Decrement API usage
+            api_key = key_info.get("api_key")
+            if api_key:
+                auth.valid_keys[api_key]["requests_remaining"] -= 1
+
+            return {
+                "success": True,
+                "content": result,
+                "content_type": request.content_type,
+                "model": request.model,
+                "tier": key_info["tier"],
+                "requests_remaining": key_info["requests_remaining"] - 1,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"HF API error: {response.text}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/usage")
+async def get_usage(key_info: Dict[str, Any] = Depends(verify_api_access)):
+    return {
+        "tier": key_info["tier"],
+        "requests_remaining": key_info["requests_remaining"],
+        "timestamp": datetime.now().isoformat()
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)"

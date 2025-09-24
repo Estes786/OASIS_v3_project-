@@ -1,0 +1,143 @@
+"#!/bin/bash
+# OASIS v3 Termux Setup Script
+# Ultra-lightweight AI infrastructure for Android
+
+set -e
+
+echo "ðŸŒŸ OASIS v3 Termux Setup"
+echo "========================="
+
+# Update packages
+echo "ðŸ“¦ Updating Termux packages..."
+pkg update -y && pkg upgrade -y
+
+# Install essential packages
+echo "ðŸ”§ Installing essential packages..."
+pkg install -y python git curl wget jq openssh
+
+# Install Python packages (minimal set)
+echo "ðŸ Installing Python dependencies..."
+pip install --upgrade pip
+pip install requests gradio fastapi uvicorn
+
+# Create OASIS directory structure
+echo "ðŸ“ Creating directory structure..."
+mkdir -p ~/.oasis/{config,logs,data,scripts}
+
+# Set up Git configuration (optional)
+echo "âš™ï¸  Setting up Git configuration..."
+read -p "Enter your Git username (or press Enter to skip): " git_user
+if [ ! -z "$git_user" ]; then
+    git config --global user.name "$git_user"
+    read -p "Enter your Git email: " git_email
+    git config --global user.email "$git_email"
+fi
+
+# Clone OASIS repository (if available)
+echo "ðŸ“¥ Cloning OASIS repository..."
+cd ~
+if [ ! -d "oasis-v3" ]; then
+    git clone https://github.com/elmatador0197/oasis-v3.git || echo "â„¹ï¸  Repository not available yet"
+fi
+
+# Create symlink for easy access
+echo "ðŸ”— Creating command shortcuts..."
+if [ -f "oasis-v3/mobile/termux/oasis-manager.py" ]; then
+    ln -sf ~/oasis-v3/mobile/termux/oasis-manager.py ~/.oasis/oasis
+    chmod +x ~/.oasis/oasis
+
+    # Add to PATH
+    echo 'export PATH="$PATH:$HOME/.oasis"' >> ~/.bashrc
+fi
+
+# Set up SSH key (optional)
+echo "ðŸ”‘ Setting up SSH key..."
+read -p "Generate SSH key for GitHub? (y/n): " setup_ssh
+if [ "$setup_ssh" = "y" ]; then
+    if [ ! -f ~/.ssh/id_rsa ]; then
+        ssh-keygen -t rsa -b 4096 -C "termux@oasis-v3"
+        echo "ðŸ“‹ Your SSH public key:"
+        cat ~/.ssh/id_rsa.pub
+        echo ""
+        echo "Add this key to your GitHub account: https://github.com/settings/ssh"
+        echo "Press Enter when done..."
+        read
+    fi
+fi
+
+# Create default configuration
+echo "âš™ï¸  Creating default configuration..."
+cat > ~/.oasis/config.json << EOF
+{
+  "spaces": {
+    "sentiment": "elmatador0197-my-oasis-agent",
+    "content_gen": "elmatador0197-content-factory", 
+    "dashboard": "elmatador0197-oasis-dashboard"
+  },
+  "api": {
+    "gateway_url": "https://api.oasis-ai.com",
+    "hf_token": "",
+    "rate_limits": {
+      "starter": 100,
+      "professional": 1000,
+      "enterprise": 10000
+    }
+  },
+  "mobile": {
+    "notifications_enabled": true,
+    "auto_sync": true,
+    "data_saver_mode": false,
+    "offline_mode": false
+  },
+  "deployment": {
+    "github_repo": "elmatador0197/oasis-v3",
+    "auto_deploy": true,
+    "branch": "main",
+    "deploy_on_push": true
+  }
+}
+EOF
+
+# Set up Hugging Face token
+echo "ðŸ¤— Hugging Face setup..."
+read -p "Enter your Hugging Face token (optional): " hf_token
+if [ ! -z "$hf_token" ]; then
+    export HF_TOKEN="$hf_token"
+    echo "export HF_TOKEN="$hf_token"" >> ~/.bashrc
+
+    # Update config file
+    jq ".api.hf_token = "$hf_token"" ~/.oasis/config.json > ~/.oasis/config_tmp.json
+    mv ~/.oasis/config_tmp.json ~/.oasis/config.json
+fi
+
+# Create startup script
+echo "ðŸš€ Creating startup shortcuts..."
+cat > ~/.oasis/start << 'EOF'
+#!/bin/bash
+# OASIS v3 Quick Start
+cd ~/oasis-v3/mobile/termux
+python3 oasis-manager.py shell
+EOF
+
+chmod +x ~/.oasis/start
+
+# Final setup
+echo ""
+echo "âœ… OASIS v3 Termux setup complete!"
+echo ""
+echo "ðŸš€ Quick Start Commands:"
+echo "   ~/.oasis/oasis status     - Check system status"
+echo "   ~/.oasis/oasis shell      - Interactive shell" 
+echo "   ~/.oasis/start           - Quick start"
+echo ""
+echo "ðŸ“± Mobile Features:"
+echo "   â€¢ Ultra-lightweight (<5MB)"
+echo "   â€¢ Zero heavy dependencies"
+echo "   â€¢ Real-time monitoring"
+echo "   â€¢ Remote deployment"
+echo ""
+echo "ðŸ’¡ Next Steps:"
+echo "   1. Source your shell: source ~/.bashrc"
+echo "   2. Start OASIS: ~/.oasis/start"
+echo "   3. Deploy your first Space!"
+echo """

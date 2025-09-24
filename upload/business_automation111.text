@@ -1,0 +1,454 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 Business Automation - Revenue Generation System
+Zero Heavy Dependencies • Ultra-Lightweight • Maximum Profit
+
+Automated business workflows for generating consistent revenue
+through AI services powered by Hugging Face ecosystem.
+Target: $1K → $5K → $10K/month progression
+"""
+
+import os
+import sys
+import json
+import time
+import uuid
+from datetime import datetime, timedelta
+from urllib.parse import urljoin
+
+# Import OASIS core components
+try:
+    from oasis_core import OASISCore, OASISLogger
+except ImportError:
+    print("❌ Error: oasis_core not found!")
+    print("Please ensure oasis_core.py is in the same directory")
+    sys.exit(1)
+
+class BusinessMetrics:
+    """Ultra-lightweight business metrics tracking"""
+
+    def __init__(self, data_dir="business"):
+        self.data_dir = data_dir
+        os.makedirs(data_dir, exist_ok=True)
+
+        self.revenue_file = os.path.join(data_dir, "revenue.json")
+        self.clients_file = os.path.join(data_dir, "clients.json")
+        self.requests_file = os.path.join(data_dir, "requests.json")
+
+        self.logger = OASISLogger()
+
+        # Load existing data
+        self.revenue_data = self._load_json(self.revenue_file, [])
+        self.clients_data = self._load_json(self.clients_file, {})
+        self.requests_data = self._load_json(self.requests_file, [])
+
+        self.logger.info("Business metrics system initialized")
+
+    def _load_json(self, file_path, default):
+        """Load JSON data with fallback"""
+        try:
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading {file_path}: {e}")
+        return default
+
+    def _save_json(self, file_path, data):
+        """Save JSON data"""
+        try:
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+        except Exception as e:
+            self.logger.error(f"Error saving {file_path}: {e}")
+
+    def record_transaction(self, client_id, service_type, amount, description=""):
+        """Record a revenue transaction"""
+        transaction = {
+            'id': str(uuid.uuid4()),
+            'client_id': client_id,
+            'service_type': service_type,
+            'amount': amount,
+            'description': description,
+            'timestamp': datetime.now().isoformat(),
+            'status': 'completed'
+        }
+
+        self.revenue_data.append(transaction)
+        self._save_json(self.revenue_file, self.revenue_data)
+
+        self.logger.info(f"Revenue recorded: ${amount} from {client_id} for {service_type}")
+        return transaction
+
+    def add_client(self, client_id, name, email, service_plan="basic"):
+        """Add a new client"""
+        client = {
+            'id': client_id,
+            'name': name,
+            'email': email,
+            'service_plan': service_plan,
+            'created_at': datetime.now().isoformat(),
+            'total_spent': 0,
+            'requests_count': 0,
+            'status': 'active'
+        }
+
+        self.clients_data[client_id] = client
+        self._save_json(self.clients_file, self.clients_data)
+
+        self.logger.info(f"Client added: {name} ({client_id})")
+        return client
+
+    def record_api_request(self, client_id, request_type, cost=0.01):
+        """Record an API request"""
+        request_record = {
+            'id': str(uuid.uuid4()),
+            'client_id': client_id,
+            'request_type': request_type,
+            'cost': cost,
+            'timestamp': datetime.now().isoformat(),
+            'status': 'completed'
+        }
+
+        self.requests_data.append(request_record)
+        self._save_json(self.requests_file, self.requests_data)
+
+        # Update client statistics
+        if client_id in self.clients_data:
+            self.clients_data[client_id]['requests_count'] += 1
+            self.clients_data[client_id]['total_spent'] += cost
+            self._save_json(self.clients_file, self.clients_data)
+
+        # Record as revenue transaction
+        self.record_transaction(client_id, request_type, cost, f"API request: {request_type}")
+
+        return request_record
+
+    def get_revenue_summary(self, days=30):
+        """Get revenue summary for specified period"""
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        total_revenue = 0
+        transactions_count = 0
+        service_breakdown = {}
+
+        for transaction in self.revenue_data:
+            transaction_date = datetime.fromisoformat(transaction['timestamp'].replace('Z', '+00:00').replace('+00:00', ''))
+
+            if transaction_date >= cutoff_date:
+                total_revenue += transaction['amount']
+                transactions_count += 1
+
+                service_type = transaction['service_type']
+                if service_type not in service_breakdown:
+                    service_breakdown[service_type] = {'count': 0, 'revenue': 0}
+
+                service_breakdown[service_type]['count'] += 1
+                service_breakdown[service_type]['revenue'] += transaction['amount']
+
+        return {
+            'period_days': days,
+            'total_revenue': total_revenue,
+            'transactions_count': transactions_count,
+            'average_transaction': total_revenue / max(transactions_count, 1),
+            'service_breakdown': service_breakdown,
+            'clients_count': len(self.clients_data),
+            'active_clients': len([c for c in self.clients_data.values() if c['status'] == 'active'])
+        }
+
+class ServicePricingEngine:
+    """Automated pricing for different AI services"""
+
+    def __init__(self):
+        self.pricing = {
+            'text_generation': {
+                'per_request': 0.05,
+                'bulk_rate': 0.03,  # for >100 requests
+                'premium_rate': 0.08
+            },
+            'content_automation': {
+                'blog_post': 75,
+                'article': 150,
+                'social_media': 25,
+                'product_description': 40
+            },
+            'api_services': {
+                'per_request': 0.01,
+                'monthly_unlimited': 99,
+                'enterprise_tier': 299
+            },
+            'custom_solutions': {
+                'hourly_rate': 100,
+                'project_minimum': 500,
+                'enterprise_consultation': 250
+            }
+        }
+
+        self.logger = OASISLogger()
+
+    def calculate_price(self, service_type, service_subtype, quantity=1, client_tier="standard"):
+        """Calculate price for a service"""
+        try:
+            if service_type in self.pricing:
+                service_pricing = self.pricing[service_type]
+
+                if service_subtype in service_pricing:
+                    base_price = service_pricing[service_subtype]
+
+                    # Apply quantity discounts
+                    if service_type == 'text_generation' and quantity > 100:
+                        base_price = service_pricing['bulk_rate']
+
+                    # Apply client tier multipliers
+                    if client_tier == "premium":
+                        base_price *= 1.2
+                    elif client_tier == "enterprise":
+                        base_price *= 1.5
+
+                    total_price = base_price * quantity
+
+                    self.logger.info(f"Price calculated: {service_type}/{service_subtype} = ${total_price}")
+                    return total_price
+
+        except Exception as e:
+            self.logger.error(f"Pricing calculation error: {e}")
+
+        # Default fallback pricing
+        return 0.01 * quantity
+
+class BusinessAutomation:
+    """Main business automation system"""
+
+    def __init__(self):
+        self.logger = OASISLogger()
+        self.oasis_core = OASISCore()
+        self.metrics = BusinessMetrics()
+        self.pricing = ServicePricingEngine()
+
+        self.revenue_targets = {
+            'month_1': 1000,  # $1K target
+            'month_2': 5000,  # $5K target  
+            'month_3': 10000  # $10K target
+        }
+
+        self.logger.info("🚀 Business Automation System initialized")
+        self.logger.info("💰 Revenue Targets: $1K → $5K → $10K")
+
+    def process_client_request(self, client_id, service_type, content, **kwargs):
+        """Process a client request and handle billing"""
+        try:
+            # Calculate pricing
+            service_subtype = kwargs.get('service_subtype', 'standard')
+            quantity = kwargs.get('quantity', 1)
+            client_tier = kwargs.get('client_tier', 'standard')
+
+            price = self.pricing.calculate_price(
+                service_type, 
+                service_subtype, 
+                quantity, 
+                client_tier
+            )
+
+            # Process the AI request
+            result = self.oasis_core.process_content_request(service_type, content, **kwargs)
+
+            if result and result['success']:
+                # Record successful transaction
+                self.metrics.record_api_request(client_id, service_type, price)
+
+                # Add pricing info to result
+                result['billing'] = {
+                    'price': price,
+                    'service_type': service_type,
+                    'service_subtype': service_subtype,
+                    'quantity': quantity
+                }
+
+                self.logger.info(f"✅ Client request processed: {client_id} - ${price}")
+                return result
+            else:
+                self.logger.error(f"❌ Request processing failed for client: {client_id}")
+                return result
+
+        except Exception as e:
+            self.logger.error(f"Error processing client request: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+
+    def generate_content_package(self, client_id, package_type, topics_list):
+        """Generate content packages for clients"""
+        package_prices = {
+            'blog_starter': {'count': 5, 'price': 300},
+            'content_boost': {'count': 10, 'price': 500},
+            'enterprise_pack': {'count': 25, 'price': 1000}
+        }
+
+        if package_type not in package_prices:
+            return {'success': False, 'error': 'Invalid package type'}
+
+        package_info = package_prices[package_type]
+        generated_content = []
+
+        for i, topic in enumerate(topics_list[:package_info['count']]):
+            content_result = self.process_client_request(
+                client_id,
+                'generate',
+                f"Write a comprehensive article about: {topic}",
+                service_subtype='article',
+                max_length=500
+            )
+
+            if content_result and content_result['success']:
+                generated_content.append({
+                    'topic': topic,
+                    'content': content_result['result'],
+                    'timestamp': content_result['timestamp']
+                })
+
+        # Record package transaction
+        self.metrics.record_transaction(
+            client_id,
+            f"content_package_{package_type}",
+            package_info['price'],
+            f"Content package: {len(generated_content)} articles"
+        )
+
+        return {
+            'success': True,
+            'package_type': package_type,
+            'content_count': len(generated_content),
+            'content': generated_content,
+            'total_price': package_info['price']
+        }
+
+    def get_business_dashboard(self):
+        """Get comprehensive business dashboard data"""
+        # Get revenue summaries
+        daily_summary = self.metrics.get_revenue_summary(1)
+        weekly_summary = self.metrics.get_revenue_summary(7)
+        monthly_summary = self.metrics.get_revenue_summary(30)
+
+        # Calculate progress toward targets
+        current_month_revenue = monthly_summary['total_revenue']
+
+        dashboard = {
+            'timestamp': datetime.now().isoformat(),
+            'revenue_summaries': {
+                'today': daily_summary,
+                'this_week': weekly_summary,
+                'this_month': monthly_summary
+            },
+            'targets': self.revenue_targets,
+            'progress': {
+                'current_month_revenue': current_month_revenue,
+                'target_1k_progress': min(100, (current_month_revenue / 1000) * 100),
+                'target_5k_progress': min(100, (current_month_revenue / 5000) * 100),
+                'target_10k_progress': min(100, (current_month_revenue / 10000) * 100)
+            },
+            'system_status': self.oasis_core.get_system_status()
+        }
+
+        return dashboard
+
+    def run_automated_marketing(self):
+        """Run automated marketing campaigns"""
+        marketing_content = [
+            "Boost your content strategy with AI-powered articles!",
+            "Generate professional blog posts in minutes with OASIS 2.0",
+            "Scale your content creation with ultra-lightweight AI",
+            "Transform your business with automated content generation"
+        ]
+
+        results = []
+        for content in marketing_content:
+            # Generate marketing variations
+            result = self.oasis_core.process_content_request(
+                'generate',
+                f"Create a compelling marketing message based on: {content}",
+                max_length=100
+            )
+
+            if result and result['success']:
+                results.append(result['result'])
+
+        return {
+            'success': True,
+            'generated_campaigns': len(results),
+            'content': results
+        }
+
+def main():
+    """Main business automation runner"""
+    print("💰 OASIS 2.0 BUSINESS AUTOMATION")
+    print("Revenue Generation • Client Management • AI Services")
+    print("=" * 60)
+
+    try:
+        # Initialize business automation
+        business = BusinessAutomation()
+
+        # Add demo client
+        demo_client = business.metrics.add_client(
+            "demo_client_001",
+            "Demo Company Ltd",
+            "demo@company.com",
+            "premium"
+        )
+
+        print(f"\n✅ Demo client added: {demo_client['name']}")
+
+        # Process sample requests
+        print("\n🔄 Processing sample client requests...")
+
+        # Sample content generation request
+        result1 = business.process_client_request(
+            "demo_client_001",
+            "generate",
+            "The benefits of AI automation for small businesses",
+            service_subtype="article",
+            max_length=200
+        )
+
+        if result1 and result1['success']:
+            print(f"✅ Content generated - Revenue: ${result1['billing']['price']}")
+
+        # Sample sentiment analysis request
+        result2 = business.process_client_request(
+            "demo_client_001", 
+            "classify",
+            "OASIS 2.0 is revolutionizing our business operations!",
+            service_subtype="sentiment"
+        )
+
+        if result2 and result2['success']:
+            print(f"✅ Sentiment analysis - Revenue: ${result2['billing']['price']}")
+
+        # Generate business dashboard
+        print("\n📊 Generating business dashboard...")
+        dashboard = business.get_business_dashboard()
+
+        print(f"\n💰 REVENUE SUMMARY:")
+        print(f"Today: ${dashboard['revenue_summaries']['today']['total_revenue']:.2f}")
+        print(f"This Week: ${dashboard['revenue_summaries']['this_week']['total_revenue']:.2f}")
+        print(f"This Month: ${dashboard['revenue_summaries']['this_month']['total_revenue']:.2f}")
+
+        print(f"\n🎯 TARGET PROGRESS:")
+        print(f"$1K Target: {dashboard['progress']['target_1k_progress']:.1f}%")
+        print(f"$5K Target: {dashboard['progress']['target_5k_progress']:.1f}%")
+        print(f"$10K Target: {dashboard['progress']['target_10k_progress']:.1f}%")
+
+        print(f"\n👥 CLIENTS: {dashboard['revenue_summaries']['this_month']['active_clients']} active")
+        print(f"📈 TRANSACTIONS: {dashboard['revenue_summaries']['this_month']['transactions_count']}")
+
+        print("\n🚀 Business Automation System running successfully!")
+        print("Ready for revenue generation!")
+
+    except Exception as e:
+        print(f"❌ Error in business automation: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

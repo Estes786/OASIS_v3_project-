@@ -1,0 +1,398 @@
+"#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Business Automation & Revenue Engine
+Zero Dependencies â€¢ Maximum Profit â€¢ Scalable Revenue Streams
+
+Automated business workflows for generating consistent revenue
+through AI services powered by Hugging Face ecosystem.
+"""
+
+import os
+import json
+import time
+from datetime import datetime, timedelta
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError
+import uuid
+
+class CivilizationBusiness:
+    """Ultra-lightweight business automation engine"""
+
+    def __init__(self):
+        self.business_dir = self._setup_directories()
+        self.config = self._load_config()
+        self.pricing = self._load_pricing()
+
+        # Revenue targets and metrics
+        self.monthly_target = float(self.config.get('REVENUE_TARGET_MONTHLY', 1500))
+        self.clients = self._load_clients()
+        self.revenue_log = self._load_revenue_log()
+
+        print("ðŸ’¼ The New Civilization Business Engine initialized")
+        print(f"ðŸŽ¯ Monthly revenue target: ${self.monthly_target}")
+
+    def _setup_directories(self):
+        """Setup business directory structure"""
+        base_dir = os.path.expanduser('~/the_new_civilization/business')
+        dirs = ['clients', 'contracts', 'invoices', 'reports']
+
+        os.makedirs(base_dir, exist_ok=True)
+        for directory in dirs:
+            os.makedirs(os.path.join(base_dir, directory), exist_ok=True)
+
+        return base_dir
+
+    def _load_config(self):
+        """Load business configuration"""
+        config_path = os.path.expanduser('~/the_new_civilization/config/.env')
+        config = {}
+
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    for line in f:
+                        if '=' in line and not line.strip().startswith('#'):
+                            key, value = line.strip().split('=', 1)
+                            config[key] = value
+        except Exception as e:
+            print(f"âš ï¸  Config loading failed: {e}")
+
+        return config
+
+    def _load_pricing(self):
+        """Load pricing configuration"""
+        return {
+            'content_generation': {
+                'basic_article': 50,
+                'premium_article': 150,
+                'technical_content': 200,
+                'social_media_pack': 25
+            },
+            'api_services': {
+                'text_generation': 0.05,
+                'sentiment_analysis': 0.03,
+                'summarization': 0.08,
+                'translation': 0.06,
+                'bulk_processing': 0.02
+            },
+            'custom_solutions': {
+                'chatbot_setup': 500,
+                'content_pipeline': 1000,
+                'ai_integration': 1500,
+                'enterprise_solution': 2500
+            }
+        }
+
+    def _load_clients(self):
+        """Load client database"""
+        clients_file = os.path.join(self.business_dir, 'clients.json')
+
+        try:
+            if os.path.exists(clients_file):
+                with open(clients_file, 'r') as f:
+                    return json.load(f)
+            else:
+                return {}
+        except:
+            return {}
+
+    def _save_clients(self):
+        """Save client database"""
+        clients_file = os.path.join(self.business_dir, 'clients.json')
+
+        try:
+            with open(clients_file, 'w') as f:
+                json.dump(self.clients, f, indent=2)
+        except Exception as e:
+            print(f"âŒ Failed to save clients: {e}")
+
+    def _load_revenue_log(self):
+        """Load revenue log"""
+        revenue_file = os.path.join(self.business_dir, 'revenue_log.json')
+
+        try:
+            if os.path.exists(revenue_file):
+                with open(revenue_file, 'r') as f:
+                    return json.load(f)
+            else:
+                return []
+        except:
+            return []
+
+    def _save_revenue_log(self):
+        """Save revenue log"""
+        revenue_file = os.path.join(self.business_dir, 'revenue_log.json')
+
+        try:
+            with open(revenue_file, 'w') as f:
+                json.dump(self.revenue_log, f, indent=2)
+        except Exception as e:
+            print(f"âŒ Failed to save revenue log: {e}")
+
+    def register_client(self, name, email, service_type, budget_range):
+        """Register new client"""
+        client_id = str(uuid.uuid4())[:8]
+
+        client = {
+            'id': client_id,
+            'name': name,
+            'email': email,
+            'service_type': service_type,
+            'budget_range': budget_range,
+            'registration_date': datetime.now().isoformat(),
+            'status': 'active',
+            'total_revenue': 0,
+            'projects': []
+        }
+
+        self.clients[client_id] = client
+        self._save_clients()
+
+        print(f"âœ… Client registered: {name} (ID: {client_id})")
+        return client_id
+
+    def create_service_package(self, service_type, package_name, description, price):
+        """Create service package for client"""
+        package = {
+            'id': str(uuid.uuid4())[:8],
+            'service_type': service_type,
+            'name': package_name,
+            'description': description,
+            'price': price,
+            'created_date': datetime.now().isoformat(),
+            'status': 'available'
+        }
+
+        return package
+
+    def process_service_request(self, client_id, service_type, details, amount):
+        """Process service request and log revenue"""
+        if client_id not in self.clients:
+            print(f"âŒ Client {client_id} not found")
+            return False
+
+        # Create transaction record
+        transaction = {
+            'id': str(uuid.uuid4())[:8],
+            'client_id': client_id,
+            'service_type': service_type,
+            'details': details,
+            'amount': amount,
+            'timestamp': datetime.now().isoformat(),
+            'status': 'completed'
+        }
+
+        # Update client record
+        self.clients[client_id]['total_revenue'] += amount
+        self.clients[client_id]['projects'].append(transaction)
+
+        # Log revenue
+        self.revenue_log.append(transaction)
+
+        # Save updates
+        self._save_clients()
+        self._save_revenue_log()
+
+        print(f"ðŸ’° Service processed: ${amount:.2f} from {self.clients[client_id]['name']}")
+        return True
+
+    def get_revenue_analytics(self):
+        """Generate comprehensive revenue analytics"""
+        if not self.revenue_log:
+            return {
+                'daily': 0, 'weekly': 0, 'monthly': 0, 'total': 0,
+                'target_progress': 0, 'top_services': [], 'client_count': 0
+            }
+
+        now = datetime.now()
+        today = now.date().isoformat()
+        this_week = (now - timedelta(days=7)).date().isoformat()
+        this_month = now.strftime('%Y-%m')
+
+        # Calculate revenue periods
+        daily_revenue = sum(
+            t['amount'] for t in self.revenue_log 
+            if t['timestamp'].startswith(today)
+        )
+
+        weekly_revenue = sum(
+            t['amount'] for t in self.revenue_log 
+            if t['timestamp'] >= this_week
+        )
+
+        monthly_revenue = sum(
+            t['amount'] for t in self.revenue_log 
+            if t['timestamp'].startswith(this_month)
+        )
+
+        total_revenue = sum(t['amount'] for t in self.revenue_log)
+
+        # Service analytics
+        service_revenue = {}
+        for transaction in self.revenue_log:
+            service = transaction['service_type']
+            service_revenue[service] = service_revenue.get(service, 0) + transaction['amount']
+
+        top_services = sorted(service_revenue.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        # Target progress
+        target_progress = (monthly_revenue / self.monthly_target) * 100 if self.monthly_target > 0 else 0
+
+        return {
+            'daily': daily_revenue,
+            'weekly': weekly_revenue,
+            'monthly': monthly_revenue,
+            'total': total_revenue,
+            'target_progress': target_progress,
+            'top_services': top_services,
+            'client_count': len(self.clients),
+            'avg_transaction': total_revenue / len(self.revenue_log) if self.revenue_log else 0
+        }
+
+    def generate_business_report(self):
+        """Generate comprehensive business report"""
+        analytics = self.get_revenue_analytics()
+
+        report = f"""
+ðŸ“Š THE NEW CIVILIZATION - BUSINESS REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+{"="*50}
+
+ðŸ’° REVENUE ANALYTICS
+{"="*20}
+ðŸ“… Daily Revenue:    ${analytics['daily']:.2f}
+ðŸ“Š Weekly Revenue:   ${analytics['weekly']:.2f}
+ðŸ“ˆ Monthly Revenue:  ${analytics['monthly']:.2f}
+ðŸ’Ž Total Revenue:    ${analytics['total']:.2f}
+
+ðŸŽ¯ TARGET PERFORMANCE
+{"="*20}
+Monthly Target:      ${self.monthly_target:.2f}
+Progress:           {analytics['target_progress']:.1f}%
+Remaining:          ${self.monthly_target - analytics['monthly']:.2f}
+
+ðŸ‘¥ CLIENT METRICS
+{"="*20}
+Active Clients:     {analytics['client_count']}
+Avg Transaction:    ${analytics['avg_transaction']:.2f}
+
+ðŸ† TOP SERVICES
+{"="*20}"""
+
+        for i, (service, revenue) in enumerate(analytics['top_services'], 1):
+            report += f"\n{i}. {service.title()}: ${revenue:.2f}"
+
+        # Save report
+        report_file = os.path.join(self.business_dir, 'reports', f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+
+        try:
+            with open(report_file, 'w') as f:
+                f.write(report)
+            print(f"ðŸ“‹ Report saved: {report_file}")
+        except Exception as e:
+            print(f"âŒ Failed to save report: {e}")
+
+        return report
+
+    def run_automated_demo(self):
+        """Run automated business demo with sample data"""
+        print("\nðŸš€ Running Business Automation Demo...")
+
+        # Register sample clients
+        clients = [
+            ("Tech Startup Inc", "ceo@techstartup.com", "content_generation", "500-1000"),
+            ("Marketing Agency Pro", "director@marketingpro.com", "api_services", "200-500"),
+            ("Enterprise Corp", "it@enterprise.com", "custom_solutions", "2000-5000")
+        ]
+
+        print("\nðŸ‘¥ Registering sample clients...")
+        for name, email, service, budget in clients:
+            client_id = self.register_client(name, email, service, budget)
+
+        # Process sample transactions
+        print("\nðŸ’¼ Processing sample service requests...")
+        sample_transactions = [
+            (list(self.clients.keys())[0], "content_generation", "10 blog articles", 500),
+            (list(self.clients.keys())[1], "api_services", "1000 API calls", 50), 
+            (list(self.clients.keys())[2], "custom_solutions", "AI chatbot setup", 1500),
+            (list(self.clients.keys())[0], "content_generation", "Social media content", 150),
+            (list(self.clients.keys())[1], "api_services", "Sentiment analysis batch", 75)
+        ]
+
+        for client_id, service, details, amount in sample_transactions:
+            self.process_service_request(client_id, service, details, amount)
+            time.sleep(0.1)  # Simulate processing time
+
+        # Generate report
+        print("\nðŸ“Š Generating business analytics...")
+        report = self.generate_business_report()
+        print(report)
+
+        print("\nðŸŽ‰ Business automation demo completed successfully!")
+        return True
+
+    def run_interactive_business_center(self):
+        """Interactive business management center"""
+        while True:
+            print("\n" + "="*50)
+            print("ðŸ’¼ THE NEW CIVILIZATION - BUSINESS CENTER")
+            print("="*50)
+            print("1. ðŸ‘¥ Register New Client")
+            print("2. ðŸ’¼ Process Service Request")
+            print("3. ðŸ“Š View Revenue Analytics")
+            print("4. ðŸ“‹ Generate Business Report")
+            print("5. ðŸ¤– Run Automated Demo")
+            print("6. ðŸšª Exit")
+
+            try:
+                choice = input("\nðŸš€ Select option (1-6): ").strip()
+
+                if choice == '1':
+                    name = input("Client name: ")
+                    email = input("Client email: ")
+                    service = input("Service type (content_generation/api_services/custom_solutions): ")
+                    budget = input("Budget range: ")
+                    self.register_client(name, email, service, budget)
+
+                elif choice == '2':
+                    client_id = input("Client ID: ")
+                    service = input("Service type: ")
+                    details = input("Service details: ")
+                    amount = float(input("Amount ($): "))
+                    self.process_service_request(client_id, service, details, amount)
+
+                elif choice == '3':
+                    analytics = self.get_revenue_analytics()
+                    print(f"\nðŸ’° Revenue Analytics:")
+                    print(f"   ðŸ“… Daily: ${analytics['daily']:.2f}")
+                    print(f"   ðŸ“Š Monthly: ${analytics['monthly']:.2f}")
+                    print(f"   ðŸŽ¯ Target Progress: {analytics['target_progress']:.1f}%")
+                    print(f"   ðŸ’Ž Total: ${analytics['total']:.2f}")
+                    print(f"   ðŸ‘¥ Clients: {analytics['client_count']}")
+
+                elif choice == '4':
+                    report = self.generate_business_report()
+                    print(report)
+
+                elif choice == '5':
+                    self.run_automated_demo()
+
+                elif choice == '6':
+                    print("\nðŸš€ Thank you for using The New Civilization Business Center!")
+                    break
+
+                else:
+                    print("âŒ Invalid choice. Please try again.")
+
+            except KeyboardInterrupt:
+                print("\n\nðŸšª Exiting Business Center...")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {e}")
+
+if __name__ == "__main__":
+    # Initialize business engine
+    business = CivilizationBusiness()
+
+    # Run interactive business center
+    business.run_interactive_business_center()"

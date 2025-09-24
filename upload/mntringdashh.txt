@@ -1,0 +1,648 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Revolutionary Monitoring Dashboard
+Ultra-lightweight performance monitoring for Termux environment
+
+Features:
+- Real-time system metrics tracking
+- API performance monitoring  
+- Business KPI dashboard
+- Resource usage optimization
+- Alert system for anomalies
+- Zero heavy dependencies (built-in libraries only)
+
+Author: OASIS Development Team
+License: MIT
+"""
+
+import os
+import sys
+import json
+import time
+import urllib.request
+import urllib.parse
+from datetime import datetime, timedelta
+from collections import defaultdict, deque
+import threading
+import subprocess
+
+class SystemMonitor:
+    """Ultra-lightweight system monitoring using built-in tools"""
+
+    def __init__(self, max_history=100):
+        self.max_history = max_history
+        self.metrics_history = {
+            'cpu': deque(maxlen=max_history),
+            'memory': deque(maxlen=max_history),
+            'disk': deque(maxlen=max_history),
+            'network': deque(maxlen=max_history),
+            'api_calls': deque(maxlen=max_history),
+            'response_times': deque(maxlen=max_history)
+        }
+        self.start_time = time.time()
+
+    def get_cpu_usage(self):
+        """Get CPU usage percentage (Termux-compatible)"""
+        try:
+            # Use uptime for load average (available in Termux)
+            result = subprocess.run(['uptime'], capture_output=True, text=True)
+            if result.returncode == 0:
+                # Parse load average from uptime output
+                output = result.stdout.strip()
+                if 'load average:' in output:
+                    load_part = output.split('load average:')[1].strip()
+                    load_1m = float(load_part.split(',')[0].strip())
+                    # Convert to rough CPU percentage (load avg * 100)
+                    cpu_percent = min(load_1m * 100, 100)
+                    return round(cpu_percent, 2)
+        except:
+            pass
+        return 0.0
+
+    def get_memory_usage(self):
+        """Get memory usage information"""
+        try:
+            # Try to read /proc/meminfo (available in most Android/Termux)
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = f.read()
+
+            mem_total = 0
+            mem_available = 0
+
+            for line in meminfo.split('\n'):
+                if line.startswith('MemTotal:'):
+                    mem_total = int(line.split()[1]) * 1024  # Convert KB to bytes
+                elif line.startswith('MemAvailable:'):
+                    mem_available = int(line.split()[1]) * 1024
+                elif line.startswith('MemFree:') and mem_available == 0:
+                    # Fallback if MemAvailable not available
+                    mem_available = int(line.split()[1]) * 1024
+
+            if mem_total > 0:
+                mem_used = mem_total - mem_available
+                mem_percent = (mem_used / mem_total) * 100
+                return {
+                    'total': mem_total,
+                    'used': mem_used,
+                    'available': mem_available,
+                    'percent': round(mem_percent, 2)
+                }
+        except:
+            pass
+
+        return {'total': 0, 'used': 0, 'available': 0, 'percent': 0.0}
+
+    def get_disk_usage(self):
+        """Get disk usage for current directory"""
+        try:
+            # Use df command for disk usage
+            result = subprocess.run(['df', '.'], capture_output=True, text=True)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) >= 2:
+                    fields = lines[1].split()
+                    if len(fields) >= 6:
+                        total = int(fields[1]) * 1024  # Convert blocks to bytes
+                        used = int(fields[2]) * 1024
+                        available = int(fields[3]) * 1024
+                        percent = float(fields[4].rstrip('%'))
+                        return {
+                            'total': total,
+                            'used': used,
+                            'available': available,
+                            'percent': percent
+                        }
+        except:
+            pass
+
+        return {'total': 0, 'used': 0, 'available': 0, 'percent': 0.0}
+
+    def collect_metrics(self):
+        """Collect all system metrics"""
+        timestamp = time.time()
+
+        metrics = {
+            'timestamp': timestamp,
+            'datetime': datetime.fromtimestamp(timestamp).isoformat(),
+            'cpu': self.get_cpu_usage(),
+            'memory': self.get_memory_usage(),
+            'disk': self.get_disk_usage(),
+            'uptime': timestamp - self.start_time
+        }
+
+        # Store in history
+        self.metrics_history['cpu'].append((timestamp, metrics['cpu']))
+        self.metrics_history['memory'].append((timestamp, metrics['memory']['percent']))
+        self.metrics_history['disk'].append((timestamp, metrics['disk']['percent']))
+
+        return metrics
+
+class APIMonitor:
+    """Monitor API performance and health"""
+
+    def __init__(self):
+        self.call_history = deque(maxlen=1000)
+        self.endpoint_stats = defaultdict(lambda: {
+            'calls': 0,
+            'total_time': 0,
+            'errors': 0,
+            'last_call': None
+        })
+
+    def log_api_call(self, endpoint, response_time, status_code, error=None):
+        """Log API call metrics"""
+        timestamp = time.time()
+
+        call_data = {
+            'timestamp': timestamp,
+            'endpoint': endpoint,
+            'response_time': response_time,
+            'status_code': status_code,
+            'error': error,
+            'success': status_code < 400 and error is None
+        }
+
+        self.call_history.append(call_data)
+
+        # Update endpoint statistics
+        stats = self.endpoint_stats[endpoint]
+        stats['calls'] += 1
+        stats['total_time'] += response_time
+        stats['last_call'] = timestamp
+
+        if not call_data['success']:
+            stats['errors'] += 1
+
+        return call_data
+
+    def get_endpoint_stats(self, endpoint=None):
+        """Get statistics for specific endpoint or all endpoints"""
+        if endpoint:
+            if endpoint in self.endpoint_stats:
+                stats = self.endpoint_stats[endpoint].copy()
+                if stats['calls'] > 0:
+                    stats['avg_response_time'] = stats['total_time'] / stats['calls']
+                    stats['error_rate'] = (stats['errors'] / stats['calls']) * 100
+                return stats
+            return None
+
+        # Return all endpoint stats
+        all_stats = {}
+        for ep, stats in self.endpoint_stats.items():
+            ep_stats = stats.copy()
+            if ep_stats['calls'] > 0:
+                ep_stats['avg_response_time'] = ep_stats['total_time'] / ep_stats['calls']
+                ep_stats['error_rate'] = (ep_stats['errors'] / ep_stats['calls']) * 100
+            all_stats[ep] = ep_stats
+
+        return all_stats
+
+    def get_recent_calls(self, minutes=60):
+        """Get API calls from recent minutes"""
+        cutoff = time.time() - (minutes * 60)
+        return [call for call in self.call_history if call['timestamp'] > cutoff]
+
+class BusinessKPITracker:
+    """Track business KPIs and revenue metrics"""
+
+    def __init__(self, data_file='data/business_kpis.json'):
+        self.data_file = data_file
+        self.kpis = self.load_kpis()
+
+    def load_kpis(self):
+        """Load KPI data from file"""
+        try:
+            if os.path.exists(self.data_file):
+                with open(self.data_file, 'r') as f:
+                    return json.load(f)
+        except:
+            pass
+
+        return {
+            'daily_revenue': [],
+            'client_count': 0,
+            'active_projects': 0,
+            'api_usage': [],
+            'conversion_rate': 0.0,
+            'customer_satisfaction': 0.0
+        }
+
+    def save_kpis(self):
+        """Save KPI data to file"""
+        try:
+            os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
+            with open(self.data_file, 'w') as f:
+                json.dump(self.kpis, f, indent=2)
+        except Exception as e:
+            print(f"Error saving KPIs: {e}")
+
+    def update_revenue(self, amount, service_type='api'):
+        """Update daily revenue"""
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        # Find or create today's entry
+        daily_entry = None
+        for entry in self.kpis['daily_revenue']:
+            if entry['date'] == today:
+                daily_entry = entry
+                break
+
+        if not daily_entry:
+            daily_entry = {'date': today, 'amount': 0, 'services': defaultdict(float)}
+            self.kpis['daily_revenue'].append(daily_entry)
+
+        daily_entry['amount'] += amount
+        daily_entry['services'][service_type] += amount
+
+        self.save_kpis()
+
+    def get_monthly_revenue(self):
+        """Calculate monthly revenue"""
+        current_month = datetime.now().strftime('%Y-%m')
+        monthly_total = 0
+
+        for entry in self.kpis['daily_revenue']:
+            if entry['date'].startswith(current_month):
+                monthly_total += entry['amount']
+
+        return monthly_total
+
+    def get_kpi_summary(self):
+        """Get comprehensive KPI summary"""
+        monthly_revenue = self.get_monthly_revenue()
+        recent_days = [entry for entry in self.kpis['daily_revenue'][-30:]]
+
+        avg_daily = sum(entry['amount'] for entry in recent_days) / max(len(recent_days), 1)
+
+        return {
+            'monthly_revenue': monthly_revenue,
+            'average_daily_revenue': avg_daily,
+            'client_count': self.kpis['client_count'],
+            'active_projects': self.kpis['active_projects'],
+            'conversion_rate': self.kpis['conversion_rate'],
+            'customer_satisfaction': self.kpis['customer_satisfaction'],
+            'total_days_tracked': len(self.kpis['daily_revenue'])
+        }
+
+class AlertSystem:
+    """Lightweight alerting for system anomalies"""
+
+    def __init__(self):
+        self.thresholds = {
+            'cpu_high': 80.0,
+            'memory_high': 85.0,
+            'disk_high': 90.0,
+            'api_error_rate': 10.0,
+            'response_time_high': 5.0
+        }
+        self.alerts = deque(maxlen=100)
+
+    def check_system_alerts(self, metrics):
+        """Check for system-related alerts"""
+        alerts = []
+        timestamp = time.time()
+
+        # CPU alert
+        if metrics['cpu'] > self.thresholds['cpu_high']:
+            alerts.append({
+                'type': 'system',
+                'level': 'warning',
+                'message': f"High CPU usage: {metrics['cpu']:.1f}%",
+                'timestamp': timestamp
+            })
+
+        # Memory alert
+        if metrics['memory']['percent'] > self.thresholds['memory_high']:
+            alerts.append({
+                'type': 'system',
+                'level': 'warning',
+                'message': f"High memory usage: {metrics['memory']['percent']:.1f}%",
+                'timestamp': timestamp
+            })
+
+        # Disk alert
+        if metrics['disk']['percent'] > self.thresholds['disk_high']:
+            alerts.append({
+                'type': 'system',
+                'level': 'critical',
+                'message': f"High disk usage: {metrics['disk']['percent']:.1f}%",
+                'timestamp': timestamp
+            })
+
+        # Store alerts
+        for alert in alerts:
+            self.alerts.append(alert)
+
+        return alerts
+
+    def check_api_alerts(self, api_stats):
+        """Check for API-related alerts"""
+        alerts = []
+        timestamp = time.time()
+
+        for endpoint, stats in api_stats.items():
+            if stats['calls'] == 0:
+                continue
+
+            # Error rate alert
+            error_rate = (stats['errors'] / stats['calls']) * 100
+            if error_rate > self.thresholds['api_error_rate']:
+                alerts.append({
+                    'type': 'api',
+                    'level': 'warning',
+                    'message': f"High error rate for {endpoint}: {error_rate:.1f}%",
+                    'timestamp': timestamp
+                })
+
+            # Response time alert
+            avg_time = stats['total_time'] / stats['calls']
+            if avg_time > self.thresholds['response_time_high']:
+                alerts.append({
+                    'type': 'api',
+                    'level': 'warning',
+                    'message': f"Slow response for {endpoint}: {avg_time:.2f}s",
+                    'timestamp': timestamp
+                })
+
+        # Store alerts
+        for alert in alerts:
+            self.alerts.append(alert)
+
+        return alerts
+
+    def get_recent_alerts(self, minutes=60):
+        """Get alerts from recent minutes"""
+        cutoff = time.time() - (minutes * 60)
+        return [alert for alert in self.alerts if alert['timestamp'] > cutoff]
+
+class MonitoringDashboard:
+    """Main monitoring dashboard coordinator"""
+
+    def __init__(self):
+        self.system_monitor = SystemMonitor()
+        self.api_monitor = APIMonitor()
+        self.kpi_tracker = BusinessKPITracker()
+        self.alert_system = AlertSystem()
+        self.running = False
+        self.update_interval = 30  # seconds
+
+    def start_monitoring(self):
+        """Start continuous monitoring in background"""
+        self.running = True
+
+        def monitoring_loop():
+            while self.running:
+                try:
+                    # Collect system metrics
+                    metrics = self.system_monitor.collect_metrics()
+
+                    # Check for alerts
+                    system_alerts = self.alert_system.check_system_alerts(metrics)
+                    api_stats = self.api_monitor.get_endpoint_stats()
+                    api_alerts = self.alert_system.check_api_alerts(api_stats)
+
+                    # Log alerts if any
+                    all_alerts = system_alerts + api_alerts
+                    if all_alerts:
+                        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] {len(all_alerts)} alerts generated")
+                        for alert in all_alerts:
+                            print(f"  {alert['level'].upper()}: {alert['message']}")
+
+                    time.sleep(self.update_interval)
+
+                except Exception as e:
+                    print(f"Monitoring error: {e}")
+                    time.sleep(5)
+
+        # Start monitoring thread
+        monitoring_thread = threading.Thread(target=monitoring_loop, daemon=True)
+        monitoring_thread.start()
+        print(f"âœ… Monitoring started (update interval: {self.update_interval}s)")
+
+    def stop_monitoring(self):
+        """Stop continuous monitoring"""
+        self.running = False
+        print("ðŸ›‘ Monitoring stopped")
+
+    def display_dashboard(self):
+        """Display comprehensive dashboard"""
+        print("\n" + "="*60)
+        print("ðŸš€ OASIS 2.0 - MONITORING DASHBOARD")
+        print("="*60)
+
+        # System metrics
+        metrics = self.system_monitor.collect_metrics()
+        print(f"\nðŸ“Š SYSTEM METRICS")
+        print(f"   CPU Usage: {metrics['cpu']:.1f}%")
+        print(f"   Memory: {metrics['memory']['percent']:.1f}% ({self._format_bytes(metrics['memory']['used'])}/{self._format_bytes(metrics['memory']['total'])})")
+        print(f"   Disk: {metrics['disk']['percent']:.1f}% ({self._format_bytes(metrics['disk']['used'])}/{self._format_bytes(metrics['disk']['total'])})")
+        print(f"   Uptime: {self._format_duration(metrics['uptime'])}")
+
+        # API statistics
+        api_stats = self.api_monitor.get_endpoint_stats()
+        print(f"\nðŸ”— API STATISTICS")
+        if api_stats:
+            total_calls = sum(stats['calls'] for stats in api_stats.values())
+            total_errors = sum(stats['errors'] for stats in api_stats.values())
+            overall_error_rate = (total_errors / max(total_calls, 1)) * 100
+
+            print(f"   Total API Calls: {total_calls}")
+            print(f"   Overall Error Rate: {overall_error_rate:.1f}%")
+            print(f"   Active Endpoints: {len(api_stats)}")
+
+            for endpoint, stats in api_stats.items():
+                if stats['calls'] > 0:
+                    print(f"   â””â”€ {endpoint}: {stats['calls']} calls, {stats['avg_response_time']:.2f}s avg")
+        else:
+            print("   No API calls recorded yet")
+
+        # Business KPIs
+        kpi_summary = self.kpi_tracker.get_kpi_summary()
+        print(f"\nðŸ’° BUSINESS KPIS")
+        print(f"   Monthly Revenue: ${kpi_summary['monthly_revenue']:.2f}")
+        print(f"   Avg Daily Revenue: ${kpi_summary['average_daily_revenue']:.2f}")
+        print(f"   Active Clients: {kpi_summary['client_count']}")
+        print(f"   Active Projects: {kpi_summary['active_projects']}")
+        print(f"   Conversion Rate: {kpi_summary['conversion_rate']:.1f}%")
+
+        # Recent alerts
+        recent_alerts = self.alert_system.get_recent_alerts(60)
+        print(f"\nðŸš¨ RECENT ALERTS (Last 60 min)")
+        if recent_alerts:
+            for alert in recent_alerts[-5:]:  # Show last 5
+                alert_time = datetime.fromtimestamp(alert['timestamp']).strftime('%H:%M:%S')
+                print(f"   [{alert_time}] {alert['level'].upper()}: {alert['message']}")
+        else:
+            print("   âœ… No recent alerts")
+
+        print("\n" + "="*60)
+
+    def _format_bytes(self, bytes_value):
+        """Format bytes in human-readable format"""
+        if bytes_value == 0:
+            return "0 B"
+
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        size = bytes_value
+        unit_index = 0
+
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+
+        return f"{size:.1f} {units[unit_index]}"
+
+    def _format_duration(self, seconds):
+        """Format duration in human-readable format"""
+        if seconds < 60:
+            return f"{seconds:.0f}s"
+        elif seconds < 3600:
+            return f"{seconds/60:.1f}m"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+
+    def log_api_call(self, endpoint, response_time, status_code, error=None):
+        """Public method to log API calls from other modules"""
+        return self.api_monitor.log_api_call(endpoint, response_time, status_code, error)
+
+    def update_business_metric(self, metric_type, value):
+        """Update business metrics"""
+        if metric_type == 'revenue':
+            self.kpi_tracker.update_revenue(value)
+        elif metric_type == 'client_count':
+            self.kpi_tracker.kpis['client_count'] = value
+        elif metric_type == 'active_projects':
+            self.kpi_tracker.kpis['active_projects'] = value
+
+        self.kpi_tracker.save_kpis()
+
+def interactive_cli():
+    """Interactive command-line interface"""
+    dashboard = MonitoringDashboard()
+
+    print("ðŸš€ OASIS 2.0 Monitoring Dashboard")
+    print("Ultra-lightweight performance monitoring")
+    print()
+    print("Available commands:")
+    print("  dashboard  - Show full dashboard")
+    print("  system     - Show system metrics only") 
+    print("  api        - Show API statistics")
+    print("  business   - Show business KPIs")
+    print("  alerts     - Show recent alerts")
+    print("  start      - Start continuous monitoring")
+    print("  stop       - Stop continuous monitoring")
+    print("  test       - Run test scenario")
+    print("  help       - Show this help")
+    print("  quit       - Exit program")
+    print()
+
+    while True:
+        try:
+            command = input("OASIS Monitor> ").strip().lower()
+
+            if command == 'quit' or command == 'exit':
+                dashboard.stop_monitoring()
+                print("ðŸ‘‹ Goodbye!")
+                break
+
+            elif command == 'dashboard':
+                dashboard.display_dashboard()
+
+            elif command == 'system':
+                metrics = dashboard.system_monitor.collect_metrics()
+                print(f"\nðŸ“Š System Metrics [{metrics['datetime']}]")
+                print(f"CPU: {metrics['cpu']:.1f}%")
+                print(f"Memory: {metrics['memory']['percent']:.1f}% ({dashboard._format_bytes(metrics['memory']['used'])} used)")
+                print(f"Disk: {metrics['disk']['percent']:.1f}% ({dashboard._format_bytes(metrics['disk']['used'])} used)")
+                print(f"Uptime: {dashboard._format_duration(metrics['uptime'])}")
+
+            elif command == 'api':
+                api_stats = dashboard.api_monitor.get_endpoint_stats()
+                print(f"\nðŸ”— API Statistics")
+                if api_stats:
+                    for endpoint, stats in api_stats.items():
+                        print(f"{endpoint}:")
+                        print(f"  Calls: {stats['calls']}")
+                        print(f"  Avg Response: {stats.get('avg_response_time', 0):.2f}s")
+                        print(f"  Error Rate: {stats.get('error_rate', 0):.1f}%")
+                else:
+                    print("No API statistics available")
+
+            elif command == 'business':
+                kpi_summary = dashboard.kpi_tracker.get_kpi_summary()
+                print(f"\nðŸ’° Business KPIs")
+                print(f"Monthly Revenue: ${kpi_summary['monthly_revenue']:.2f}")
+                print(f"Avg Daily Revenue: ${kpi_summary['average_daily_revenue']:.2f}")
+                print(f"Client Count: {kpi_summary['client_count']}")
+                print(f"Active Projects: {kpi_summary['active_projects']}")
+
+            elif command == 'alerts':
+                recent_alerts = dashboard.alert_system.get_recent_alerts(60)
+                print(f"\nðŸš¨ Recent Alerts (Last 60 minutes)")
+                if recent_alerts:
+                    for alert in recent_alerts:
+                        alert_time = datetime.fromtimestamp(alert['timestamp']).strftime('%H:%M:%S')
+                        print(f"[{alert_time}] {alert['level'].upper()}: {alert['message']}")
+                else:
+                    print("âœ… No recent alerts")
+
+            elif command == 'start':
+                if not dashboard.running:
+                    dashboard.start_monitoring()
+                else:
+                    print("âš ï¸  Monitoring is already running")
+
+            elif command == 'stop':
+                if dashboard.running:
+                    dashboard.stop_monitoring()
+                else:
+                    print("âš ï¸  Monitoring is not running")
+
+            elif command == 'test':
+                print("\nðŸ§ª Running test scenario...")
+
+                # Simulate some API calls
+                dashboard.log_api_call("/api/generate", 1.2, 200)
+                dashboard.log_api_call("/api/sentiment", 0.8, 200)
+                dashboard.log_api_call("/api/translate", 2.1, 500, "Timeout error")
+                dashboard.log_api_call("/api/summarize", 1.5, 200)
+
+                # Update business metrics
+                dashboard.update_business_metric('revenue', 25.50)
+                dashboard.update_business_metric('client_count', 12)
+                dashboard.update_business_metric('active_projects', 8)
+
+                print("âœ… Test data generated")
+                print("ðŸ’¡ Try 'dashboard' command to see results")
+
+            elif command == 'help':
+                print("\nAvailable commands:")
+                print("  dashboard  - Show full monitoring dashboard")
+                print("  system     - Show system metrics (CPU, memory, disk)")
+                print("  api        - Show API call statistics") 
+                print("  business   - Show business KPIs and revenue")
+                print("  alerts     - Show recent system alerts")
+                print("  start      - Start continuous background monitoring")
+                print("  stop       - Stop background monitoring")
+                print("  test       - Generate test data for demonstration")
+                print("  help       - Show this help message")
+                print("  quit       - Exit the monitoring system")
+
+            elif command == '':
+                continue
+
+            else:
+                print(f"âŒ Unknown command: {command}")
+                print("ðŸ’¡ Type 'help' for available commands")
+
+        except KeyboardInterrupt:
+            dashboard.stop_monitoring()
+            print("\nðŸ‘‹ Exiting...")
+            break
+        except Exception as e:
+            print(f"âŒ Error: {e}")
+
+if __name__ == "__main__":
+    interactive_cli()

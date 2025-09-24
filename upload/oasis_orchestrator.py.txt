@@ -1,0 +1,460 @@
+"#!/usr/bin/env python3
+"""
+OASIS v3 Termux Orchestrator - Ultra-Lightweight Command Center
+STRICT: Pure Python + urllib only (NO external dependencies)
+Architecture: Termux (orchestration) + Hugging Face Spaces (AI processing)
+Target: <1MB footprint, <500ms response time
+"""
+
+import json
+import time
+import urllib.request
+import urllib.parse
+import urllib.error
+import os
+import sys
+from datetime import datetime
+
+class OASISOrchestrator:
+    """
+    Ultra-lightweight Termux orchestrator for OASIS v3
+    Zero dependencies - Pure Python + urllib only
+    """
+
+    def __init__(self, config_file="oasis_config.json"):
+        """Initialize OASIS Orchestrator with minimal footprint"""
+        self.version = "3.0.0-termux-minimal"
+        self.startup_time = datetime.now()
+        self.config = self.load_config(config_file)
+        self.session_stats = {
+            "requests": 0,
+            "successful": 0,
+            "failed": 0,
+            "total_time": 0.0
+        }
+
+        # Initialize HF endpoints from config
+        self.hf_token = self.config.get("hf_token", "")
+        self.endpoints = self.config.get("endpoints", {})
+
+        print(f"ðŸš€ OASIS v3 Orchestrator {self.version}")
+        print(f"ðŸ“± Ultra-Lightweight Termux Command Center")
+        print(f"âš¡ Started: {self.startup_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"ðŸ”— Endpoints loaded: {len(self.endpoints)}")
+
+    def load_config(self, config_file):
+        """Load configuration with fallback defaults"""
+        default_config = {
+            "hf_token": "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",
+            "endpoints": {
+                "sentiment": "https://elmatador0197-my-oasis-agent.hf.space",
+                "chat": "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+                "summarization": "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
+                "translation": "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-en-es",
+                "classification": "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-emotion"
+            },
+            "timeout": 30,
+            "retry_attempts": 3,
+            "retry_delay": 1.0
+        }
+
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                # Merge with defaults
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+            else:
+                # Create default config file
+                with open(config_file, 'w') as f:
+                    json.dump(default_config, f, indent=2)
+                print(f"ðŸ“ Created default config: {config_file}")
+                return default_config
+        except Exception as e:
+            print(f"âš ï¸ Config error: {e}")
+            return default_config
+
+    def make_request(self, url, data=None, method="GET", headers=None):
+        """
+        Make HTTP request with pure urllib (no external dependencies)
+        Includes retry logic and error handling
+        """
+        if headers is None:
+            headers = {}
+
+        # Add HF token if available
+        if self.hf_token and "huggingface.co" in url:
+            headers["Authorization"] = f"Bearer {self.hf_token}"
+
+        headers["Content-Type"] = "application/json"
+        headers["User-Agent"] = f"OASIS-v3-Orchestrator/{self.version}"
+
+        # Prepare request
+        if data:
+            data = json.dumps(data).encode('utf-8')
+
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+
+        # Retry logic
+        for attempt in range(self.config["retry_attempts"]):
+            try:
+                start_time = time.time()
+
+                with urllib.request.urlopen(req, timeout=self.config["timeout"]) as response:
+                    response_data = response.read().decode('utf-8')
+
+                request_time = time.time() - start_time
+                self.session_stats["requests"] += 1
+                self.session_stats["successful"] += 1
+                self.session_stats["total_time"] += request_time
+
+                return {
+                    "success": True,
+                    "status_code": response.status,
+                    "data": json.loads(response_data) if response_data else {},
+                    "response_time": request_time,
+                    "attempt": attempt + 1
+                }
+
+            except urllib.error.HTTPError as e:
+                error_msg = f"HTTP {e.code}: {e.reason}"
+                if attempt == self.config["retry_attempts"] - 1:
+                    self.session_stats["requests"] += 1
+                    self.session_stats["failed"] += 1
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "status_code": e.code,
+                        "attempt": attempt + 1
+                    }
+                time.sleep(self.config["retry_delay"])
+
+            except urllib.error.URLError as e:
+                error_msg = f"URL Error: {e.reason}"
+                if attempt == self.config["retry_attempts"] - 1:
+                    self.session_stats["requests"] += 1
+                    self.session_stats["failed"] += 1
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "attempt": attempt + 1
+                    }
+                time.sleep(self.config["retry_delay"])
+
+            except Exception as e:
+                error_msg = f"Request error: {str(e)}"
+                if attempt == self.config["retry_attempts"] - 1:
+                    self.session_stats["requests"] += 1
+                    self.session_stats["failed"] += 1
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "attempt": attempt + 1
+                    }
+                time.sleep(self.config["retry_delay"])
+
+        return {"success": False, "error": "Max retry attempts exceeded"}
+
+    def analyze_sentiment(self, text):
+        """Analyze sentiment using HF Spaces endpoint"""
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        endpoint = self.endpoints.get("sentiment")
+        if not endpoint:
+            return {"success": False, "error": "Sentiment endpoint not configured"}
+
+        # For HF Spaces, we need to use the correct API format
+        if "hf.space" in endpoint:
+            # Gradio interface call
+            data = {"data": [text]}
+            response = self.make_request(f"{endpoint}/api/predict", data, "POST")
+        else:
+            # Direct HF API call
+            data = {"inputs": text}
+            response = self.make_request(endpoint, data, "POST")
+
+        if response["success"]:
+            return {
+                "success": True,
+                "sentiment": response["data"],
+                "response_time": response["response_time"],
+                "endpoint": endpoint
+            }
+        else:
+            return response
+
+    def translate_text(self, text, target_lang="es"):
+        """Translate text using HF translation model"""
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        endpoint = self.endpoints.get("translation")
+        if not endpoint:
+            return {"success": False, "error": "Translation endpoint not configured"}
+
+        data = {"inputs": text}
+        response = self.make_request(endpoint, data, "POST")
+
+        if response["success"]:
+            return {
+                "success": True,
+                "translation": response["data"],
+                "response_time": response["response_time"],
+                "target_language": target_lang,
+                "endpoint": endpoint
+            }
+        else:
+            return response
+
+    def summarize_text(self, text, max_length=50):
+        """Summarize text using HF summarization model"""
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        endpoint = self.endpoints.get("summarization")
+        if not endpoint:
+            return {"success": False, "error": "Summarization endpoint not configured"}
+
+        data = {
+            "inputs": text,
+            "parameters": {"max_length": max_length}
+        }
+        response = self.make_request(endpoint, data, "POST")
+
+        if response["success"]:
+            return {
+                "success": True,
+                "summary": response["data"],
+                "response_time": response["response_time"],
+                "max_length": max_length,
+                "endpoint": endpoint
+            }
+        else:
+            return response
+
+    def classify_emotion(self, text):
+        """Classify emotion in text using HF classification model"""
+        if not text.strip():
+            return {"success": False, "error": "Empty text provided"}
+
+        endpoint = self.endpoints.get("classification")
+        if not endpoint:
+            return {"success": False, "error": "Classification endpoint not configured"}
+
+        data = {"inputs": text}
+        response = self.make_request(endpoint, data, "POST")
+
+        if response["success"]:
+            return {
+                "success": True,
+                "emotions": response["data"],
+                "response_time": response["response_time"],
+                "endpoint": endpoint
+            }
+        else:
+            return response
+
+    def get_status(self):
+        """Get orchestrator status and statistics"""
+        uptime = datetime.now() - self.startup_time
+
+        success_rate = 0
+        avg_response_time = 0
+
+        if self.session_stats["requests"] > 0:
+            success_rate = (self.session_stats["successful"] / self.session_stats["requests"]) * 100
+            avg_response_time = self.session_stats["total_time"] / self.session_stats["successful"] if self.session_stats["successful"] > 0 else 0
+
+        return {
+            "version": self.version,
+            "uptime_seconds": uptime.total_seconds(),
+            "uptime_formatted": str(uptime).split('.')[0],
+            "endpoints_configured": len(self.endpoints),
+            "total_requests": self.session_stats["requests"],
+            "successful_requests": self.session_stats["successful"],
+            "failed_requests": self.session_stats["failed"],
+            "success_rate_percent": round(success_rate, 2),
+            "avg_response_time_ms": round(avg_response_time * 1000, 2),
+            "total_processing_time": round(self.session_stats["total_time"], 3)
+        }
+
+    def batch_process(self, tasks):
+        """Process multiple AI tasks in batch"""
+        results = []
+
+        for i, task in enumerate(tasks):
+            task_type = task.get("type")
+            task_data = task.get("data", "")
+
+            print(f"ðŸ”„ Processing task {i+1}/{len(tasks)}: {task_type}")
+
+            if task_type == "sentiment":
+                result = self.analyze_sentiment(task_data)
+            elif task_type == "translate":
+                result = self.translate_text(task_data)
+            elif task_type == "summarize":
+                result = self.summarize_text(task_data)
+            elif task_type == "emotion":
+                result = self.classify_emotion(task_data)
+            else:
+                result = {"success": False, "error": f"Unknown task type: {task_type}"}
+
+            result["task_id"] = task.get("id", i)
+            result["task_type"] = task_type
+            results.append(result)
+
+        return {
+            "batch_results": results,
+            "total_tasks": len(tasks),
+            "successful_tasks": sum(1 for r in results if r["success"]),
+            "failed_tasks": sum(1 for r in results if not r["success"])
+        }
+
+def main():
+    """Main orchestrator CLI interface"""
+    print("\n" + "="*50)
+    print("ðŸš€ OASIS v3 Termux Orchestrator")
+    print("ðŸ“± Ultra-Lightweight AI Command Center")
+    print("="*50 + "\n")
+
+    # Initialize orchestrator
+    orchestrator = OASISOrchestrator()
+
+    print("\nðŸ’¡ Available Commands:")
+    print("  1. status - Show orchestrator status")
+    print("  2. sentiment <text> - Analyze sentiment")
+    print("  3. translate <text> - Translate to Spanish")
+    print("  4. summarize <text> - Summarize text")
+    print("  5. emotion <text> - Classify emotions")
+    print("  6. batch <file.json> - Process batch tasks")
+    print("  7. test - Run test suite")
+    print("  8. quit - Exit orchestrator")
+    print("\nType 'help' for detailed command info\n")
+
+    while True:
+        try:
+            command_input = input("ðŸŽ¯ OASIS> ").strip()
+
+            if not command_input:
+                continue
+
+            parts = command_input.split(" ", 1)
+            command = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
+
+            if command == "quit" or command == "exit":
+                print("ðŸ‘‹ OASIS Orchestrator shutting down...")
+                break
+
+            elif command == "help":
+                print("\nðŸ“– OASIS v3 Command Reference:")
+                print("  status          - Show system status and statistics")
+                print("  sentiment TEXT  - Analyze sentiment of TEXT")
+                print("  translate TEXT  - Translate TEXT to Spanish")
+                print("  summarize TEXT  - Create summary of TEXT")
+                print("  emotion TEXT    - Classify emotions in TEXT")
+                print("  batch FILE      - Process tasks from JSON file")
+                print("  test            - Run comprehensive test suite")
+                print("  quit/exit       - Shutdown orchestrator\n")
+
+            elif command == "status":
+                status = orchestrator.get_status()
+                print("\nðŸ“Š OASIS Orchestrator Status:")
+                for key, value in status.items():
+                    print(f"  {key}: {value}")
+                print()
+
+            elif command == "sentiment":
+                if not args:
+                    print("âŒ Usage: sentiment <text to analyze>")
+                    continue
+
+                print(f"ðŸ¤– Analyzing sentiment: {args[:50]}...")
+                result = orchestrator.analyze_sentiment(args)
+
+                if result["success"]:
+                    print(f"âœ… Sentiment: {result['sentiment']}")
+                    print(f"â±ï¸ Response time: {result['response_time']:.2f}s")
+                else:
+                    print(f"âŒ Error: {result['error']}")
+
+            elif command == "translate":
+                if not args:
+                    print("âŒ Usage: translate <text to translate>")
+                    continue
+
+                print(f"ðŸŒ Translating: {args[:50]}...")
+                result = orchestrator.translate_text(args)
+
+                if result["success"]:
+                    print(f"âœ… Translation: {result['translation']}")
+                    print(f"â±ï¸ Response time: {result['response_time']:.2f}s")
+                else:
+                    print(f"âŒ Error: {result['error']}")
+
+            elif command == "summarize":
+                if not args:
+                    print("âŒ Usage: summarize <text to summarize>")
+                    continue
+
+                print(f"ðŸ“„ Summarizing: {args[:50]}...")
+                result = orchestrator.summarize_text(args)
+
+                if result["success"]:
+                    print(f"âœ… Summary: {result['summary']}")
+                    print(f"â±ï¸ Response time: {result['response_time']:.2f}s")
+                else:
+                    print(f"âŒ Error: {result['error']}")
+
+            elif command == "emotion":
+                if not args:
+                    print("âŒ Usage: emotion <text to analyze>")
+                    continue
+
+                print(f"ðŸ˜Š Analyzing emotions: {args[:50]}...")
+                result = orchestrator.classify_emotion(args)
+
+                if result["success"]:
+                    print(f"âœ… Emotions: {result['emotions']}")
+                    print(f"â±ï¸ Response time: {result['response_time']:.2f}s")
+                else:
+                    print(f"âŒ Error: {result['error']}")
+
+            elif command == "test":
+                print("ðŸ§ª Running OASIS test suite...")
+
+                # Test cases
+                test_cases = [
+                    {"type": "sentiment", "data": "I love this amazing AI orchestrator!"},
+                    {"type": "translate", "data": "Hello world, this is a test"},
+                    {"type": "emotion", "data": "I am so excited about this technology!"}
+                ]
+
+                results = orchestrator.batch_process(test_cases)
+
+                print(f"\nâœ… Test Results:")
+                print(f"  Total tests: {results['total_tasks']}")
+                print(f"  Successful: {results['successful_tasks']}")
+                print(f"  Failed: {results['failed_tasks']}")
+
+                for result in results["batch_results"]:
+                    status = "âœ…" if result["success"] else "âŒ"
+                    print(f"  {status} {result['task_type']}: {result.get('error', 'Success')}")
+                print()
+
+            else:
+                print(f"âŒ Unknown command: {command}")
+                print("ðŸ’¡ Type 'help' for available commands")
+
+        except KeyboardInterrupt:
+            print("\n\nðŸ‘‹ OASIS Orchestrator interrupted. Goodbye!")
+            break
+        except Exception as e:
+            print(f"âŒ Error: {e}")
+
+if __name__ == "__main__":
+    main()"

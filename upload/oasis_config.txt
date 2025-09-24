@@ -1,0 +1,50 @@
+"""
+OASIS 2.0 - Ultra-Lightweight Configuration
+Pure API-First Architecture - NO HEAVY DEPENDENCIES!
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+class OasisConfig:
+    """Ultra-lightweight configuration for OASIS 2.0"""
+    
+    # Project paths
+    BASE_DIR = Path(__file__).parent.parent
+    SCRIPTS_DIR = BASE_DIR / "scripts"
+    DATA_DIR = BASE_DIR / "data"
+    LOGS_DIR = BASE_DIR / "logs"
+    BUSINESS_DIR = BASE_DIR / "business"
+    
+    # Hugging Face API configuration (API-FIRST ONLY!)
+    HF_TOKEN = os.getenv("HF_TOKEN")
+    HF_USERNAME = os.getenv("HF_USERNAME")
+    HF_API_BASE = "https://api-inference.huggingface.co/models"
+    
+    # Default models (called via API only)
+    DEFAULT_MODELS = {
+        "text_generation": "microsoft/DialoGPT-medium",
+        "text_classification": "cardiffnlp/twitter-roberta-base-sentiment-latest", 
+        "summarization": "facebook/bart-large-cnn",
+        "translation": "Helsinki-NLP/opus-mt-en-id",
+        "image_generation": "runwayml/stable-diffusion-v1-5"
+    }
+    
+    # Business configuration
+    PRICING = {
+        "text_generation": 0.05,
+        "text_classification": 0.01,
+        "summarization": 0.03,
+        "translation": 0.02,
+        "image_generation": 0.10
+    }
+    
+    # API timeout
+    API_TIMEOUT = 60
+
+# Initialize config
+config = OasisConfig()

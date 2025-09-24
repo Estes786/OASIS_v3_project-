@@ -1,0 +1,35 @@
+"# FMAA BDI Agent - Production Requirements
+# Minimal production deployment
+
+# Essential Core
+requests>=2.31.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+psutil>=5.9.0
+asyncio-mqtt>=0.13.0
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+gunicorn>=21.2.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Monitoring & Logging
+rich>=13.6.0
+loguru>=0.7.2
+prometheus-client>=0.18.0
+
+# BDI Core
+pydantic>=2.4.0
+networkx>=3.2.1
+
+# Cloud integrations
+google-cloud-storage>=2.10.0
+boto3>=1.29.0
+
+# Database
+sqlalchemy>=2.0.0
+redis>=5.0.0"

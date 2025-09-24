@@ -1,0 +1,5 @@
+"# OASIS v3 Sentiment Analysis Space
+# Ultra-lightweight Gradio app with zero heavy ML dependencies
+
+gradio>=4.0.0
+requests>=2.31.0"

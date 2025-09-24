@@ -1,0 +1,121 @@
+# OASIS 2.0 Ultra-Lightweight Configuration
+# Mobile AI Revolution • Zero Dependencies • Instant Revenue
+
+# ===========================================
+# HUGGING FACE CONFIGURATION (REQUIRED)
+# ===========================================
+# Get your token from: https://huggingface.co/settings/tokens
+# Replace 'your_hugging_face_token_here' with your actual token
+HF_TOKEN=your_hugging_face_token_here
+
+# ===========================================
+# PROJECT SETTINGS
+# ===========================================
+# Unique identifier for your OASIS project
+OASIS_PROJECT_ID=oasis-2.0-mobile
+
+# Enable revenue tracking and generation
+REVENUE_MODE=active
+
+# Enable debug logging for development
+DEBUG_MODE=true
+
+# ===========================================
+# MOBILE OPTIMIZATION SETTINGS
+# ===========================================
+# Maximum batch size for mobile processing
+MAX_BATCH_SIZE=10
+
+# API request timeout (seconds)
+API_TIMEOUT=30
+
+# Enable mobile-specific optimizations
+MOBILE_OPTIMIZATION=true
+
+# Memory usage limit (MB) - for Termux optimization
+MEMORY_LIMIT=512
+
+# ===========================================
+# BUSINESS AUTOMATION SETTINGS
+# ===========================================
+# Default pricing tier (basic, premium, enterprise)
+DEFAULT_PRICING_TIER=premium
+
+# Enable automatic pricing optimization
+AUTO_PRICING=true
+
+# Revenue tracking interval (minutes)
+REVENUE_TRACKING_INTERVAL=60
+
+# ===========================================
+# API INTEGRATION SETTINGS
+# ===========================================
+# Default models for different tasks
+DEFAULT_TEXT_MODEL=microsoft/DialoGPT-medium
+DEFAULT_CODE_MODEL=Salesforce/codegen-350M-mono
+DEFAULT_SUMMARY_MODEL=facebook/bart-large-cnn
+
+# API rate limiting (requests per minute)
+API_RATE_LIMIT=100
+
+# Retry attempts for failed requests
+API_RETRY_ATTEMPTS=3
+
+# ===========================================
+# TERMUX-SPECIFIC SETTINGS
+# ===========================================
+# Enable Termux storage optimization
+TERMUX_STORAGE_OPTIMIZATION=true
+
+# Battery usage optimization
+BATTERY_OPTIMIZATION=true
+
+# Network usage optimization for mobile data
+MOBILE_DATA_OPTIMIZATION=true
+
+# ===========================================
+# ADVANCED SETTINGS (Optional)
+# ===========================================
+# Custom API endpoints (if using self-hosted)
+# CUSTOM_API_ENDPOINT=https://your-api.example.com
+
+# Enable experimental features
+# EXPERIMENTAL_FEATURES=false
+
+# Custom model cache directory
+# MODEL_CACHE_DIR=./cache
+
+# Log level (DEBUG, INFO, WARNING, ERROR)
+LOG_LEVEL=INFO
+
+# ===========================================
+# BUSINESS METRICS SETTINGS
+# ===========================================
+# Enable business analytics
+BUSINESS_ANALYTICS=true
+
+# Revenue reporting interval (hours)
+REVENUE_REPORTING_INTERVAL=24
+
+# Client data encryption (for enterprise)
+CLIENT_DATA_ENCRYPTION=true
+
+# ===========================================
+# QUICK SETUP NOTES
+# ===========================================
+# 1. Copy this file to .env
+# 2. Get HF token: https://huggingface.co/settings/tokens  
+# 3. Replace HF_TOKEN value above
+# 4. Customize other settings as needed
+# 5. Run: python setup.py
+# 6. Start: python core/oasis_controller.py
+
+# ===========================================
+# REVENUE POTENTIAL REFERENCE
+# ===========================================
+# Content Generation: $50-200 per project
+# API Services: $0.01-0.10 per call
+# Custom Solutions: $500-2000 per client
+# Monthly Potential: $5,000-50,000+
+
+# Welcome to the OASIS 2.0 Revolution! 🚀

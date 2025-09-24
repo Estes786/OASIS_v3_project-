@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 Business Automation System
+Revenue Generation & Client Management
+
+Ultra-lightweight business operations center focused on generating real revenue
+through AI services powered by Hugging Face ecosystem.
+"""
+
+import os
+import sys
+import json
+import time
+from datetime import datetime, timedelta
+from urllib.request import urlopen, Request
+from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+
+# Add config to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'config'))
+
+try:
+    from settings import *
+except ImportError:
+    print("âŒ Configuration not found! Run setup script first.")
+    sys.exit(1)
+
+class BusinessMetrics:
+    """Track business metrics and revenue in ultra-lightweight JSON storage"""
+
+    def __init__(self, data_file="data/business_metrics.json"):
+        self.data_file = data_file
+        os.makedirs(os.path.dirname(data_file), exist_ok=True)
+        self.data = self._load_data()
+
+    def _load_data(self):
+        """Load existing data or create new structure"""
+        try:
+            with open(self.data_file, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {
+                "clients": {},
+                "services": {},
+                "revenue": {
+                    "daily": {},
+                    "monthly": {},
+                    "total": 0
+                },
+                "requests": [],
+                "created": datetime.now().isoformat()
+            }
+
+    def _save_data(self):
+        """Save data to JSON file"""
+        with open(self.data_file, 'w') as f:
+            json.dump(self.data, f, indent=2)
+
+    def add_client(self, client_id, name, email, package="basic"):
+        """Add new client"""
+        self.data["clients"][client_id] = {
+            "name": name,
+            "email": email,
+            "package": package,
+            "created": datetime.now().isoformat(),
+            "status": "active",
+            "total_requests": 0,
+            "total_revenue": 0
+        }
+        self._save_data()
+        return True
+
+    def log_request(self, client_id, service_type, cost, details=None):
+        """Log a service request and calculate revenue"""
+        request_data = {
+            "id": len(self.data["requests"]) + 1,
+            "client_id": client_id,
+            "service": service_type,
+            "cost": cost,
+            "timestamp": datetime.now().isoformat(),
+            "details": details or {}
+        }
+
+        self.data["requests"].append(request_data)
+
+        # Update client stats
+        if client_id in self.data["clients"]:
+            self.data["clients"][client_id]["total_requests"] += 1
+            self.data["clients"][client_id]["total_revenue"] += cost
+
+        # Update service stats
+        if service_type not in self.data["services"]:
+            self.data["services"][service_type] = {"count": 0, "revenue": 0}
+
+        self.data["services"][service_type]["count"] += 1
+        self.data["services"][service_type]["revenue"] += cost
+
+        # Update revenue tracking
+        today = datetime.now().strftime("%Y-%m-%d")
+        month = datetime.now().strftime("%Y-%m")
+
+        if today not in self.data["revenue"]["daily"]:
+            self.data["revenue"]["daily"][today] = 0
+        if month not in self.data["revenue"]["monthly"]:
+            self.data["revenue"]["monthly"][month] = 0
+
+        self.data["revenue"]["daily"][today] += cost
+        self.data["revenue"]["monthly"][month] += cost
+        self.data["revenue"]["total"] += cost
+
+        self._save_data()
+        return request_data["id"]
+
+    def get_revenue_summary(self, days=30):
+        """Get revenue summary for specified days"""
+        today = datetime.now().date()
+        total_period = 0
+        daily_avg = 0
+
+        for i in range(days):
+            date_key = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            total_period += self.data["revenue"]["daily"].get(date_key, 0)
+
+        daily_avg = total_period / days if days > 0 else 0
+
+        return {
+            "period_days": days,
+            "period_revenue": total_period,
+            "daily_average": daily_avg,
+            "monthly_projection": daily_avg * 30,
+            "total_all_time": self.data["revenue"]["total"],
+            "active_clients": len([c for c in self.data["clients"].values() if c["status"] == "active"]),
+            "total_requests": len(self.data["requests"])
+        }
+
+class ServicePricing:
+    """Ultra-lightweight pricing calculator for AI services"""
+
+    def __init__(self):
+        self.pricing = {
+            "content_generation": {
+                "basic": 0.05,      # per 100 words
+                "premium": 0.10,
+                "enterprise": 0.15
+            },
+            "sentiment_analysis": {
+                "basic": 0.01,      # per request
+                "premium": 0.02,
+                "enterprise": 0.03
+            },
+            "text_summarization": {
+                "basic": 0.03,      # per document
+                "premium": 0.06,
+                "enterprise": 0.10
+            },
+            "translation": {
+                "basic": 0.02,      # per 100 words
+                "premium": 0.04,
+                "enterprise": 0.06
+            },
+            "custom_project": {
+                "basic": 50.00,     # flat rate
+                "premium": 150.00,
+                "enterprise": 500.00
+            }
+        }
+
+    def calculate_cost(self, service_type, package, quantity=1):
+        """Calculate cost for a service"""
+        if service_type not in self.pricing:
+            return 0
+
+        base_price = self.pricing[service_type].get(package, self.pricing[service_type]["basic"])
+        return base_price * quantity
+
+    def get_service_menu(self):
+        """Get formatted service menu"""
+        menu = "ðŸ’° OASIS 2.0 SERVICE PRICING\n"
+        menu += "=" * 40 + "\n"
+
+        for service, prices in self.pricing.items():
+            menu += f"\nðŸ“‹ {service.replace('_', ' ').title()}:\n"
+            for package, price in prices.items():
+                menu += f"  {package.capitalize()}: ${price:.2f}\n"
+
+        return menu
+
+class ClientManager:
+    """Manage clients and their service packages"""
+
+    def __init__(self, metrics):
+        self.metrics = metrics
+        self.pricing = ServicePricing()
+
+    def create_client(self, name, email, package="basic"):
+        """Create new client with unique ID"""
+        client_id = f"client_{int(time.time())}"
+        success = self.metrics.add_client(client_id, name, email, package)
+
+        if success:
+            return {
+                "client_id": client_id,
+                "name": name,
+                "email": email,
+                "package": package,
+                "status": "created"
+            }
+        return None
+
+    def process_service_request(self, client_id, service_type, data, package=None):
+        """Process a service request and calculate billing"""
+
+        # Get client info
+        client = self.metrics.data["clients"].get(client_id)
+        if not client:
+            return {"error": "Client not found"}
+
+        # Determine package and quantity
+        if not package:
+            package = client["package"]
+
+        quantity = self._calculate_quantity(service_type, data)
+        cost = self.pricing.calculate_cost(service_type, package, quantity)
+
+        # Log the request
+        request_id = self.metrics.log_request(
+            client_id, 
+            service_type, 
+            cost, 
+            {
+                "quantity": quantity,
+                "package": package,
+                "data_preview": str(data)[:100]
+            }
+        )
+
+        return {
+            "request_id": request_id,
+            "client_id": client_id,
+            "service": service_type,
+            "package": package,
+            "quantity": quantity,
+            "cost": cost,
+            "status": "processed"
+        }
+
+    def _calculate_quantity(self, service_type, data):
+        """Calculate quantity for billing purposes"""
+        if isinstance(data, str):
+            word_count = len(data.split())
+
+            if service_type in ["content_generation", "translation"]:
+                return max(1, word_count // 100)  # per 100 words
+            elif service_type in ["sentiment_analysis", "text_summarization"]:
+                return 1  # per request/document
+            else:
+                return 1
+
+        return 1
+
+class AutomationEngine:
+    """Main automation engine for business operations"""
+
+    def __init__(self):
+        self.metrics = BusinessMetrics()
+        self.client_manager = ClientManager(self.metrics)
+        self.pricing = ServicePricing()
+
+    def start_automation_mode(self):
+        """Start interactive automation mode"""
+        print("ðŸš€ OASIS 2.0 BUSINESS AUTOMATION STARTED")
+        print("=" * 45)
+        print("Commands:")
+        print("  client add <name> <email> [package]  - Add new client")
+        print("  client list                         - List all clients")
+        print("  service <client_id> <type> <data>   - Process service")
+        print("  revenue [days]                      - Revenue report")
+        print("  pricing                             - Show pricing menu")
+        print("  demo                               - Run demo scenario")
+        print("  status                             - System status")
+        print("  help                               - Show this help")
+        print("  exit                               - Exit automation")
+        print("=" * 45)
+
+        while True:
+            try:
+                command = input("\nðŸ’¼ BUSINESS> ").strip()
+
+                if command.lower() in ['exit', 'quit']:
+                    print("ðŸ‘‹ Business automation shutting down...")
+                    break
+                elif command.lower() == 'help':
+                    print("Available commands: client, service, revenue, pricing, demo, status, exit")
+                elif command.lower() == 'status':
+                    self._show_status()
+                elif command.lower() == 'pricing':
+                    print(self.pricing.get_service_menu())
+                elif command.startswith('revenue'):
+                    days = 30
+                    parts = command.split()
+                    if len(parts) > 1 and parts[1].isdigit():
+                        days = int(parts[1])
+                    self._show_revenue_report(days)
+                elif command.startswith('client add'):
+                    self._handle_add_client(command)
+                elif command.lower() == 'client list':
+                    self._list_clients()
+                elif command.startswith('service '):
+                    self._handle_service_request(command)
+                elif command.lower() == 'demo':
+                    self._run_demo()
+                else:
+                    print("â“ Unknown command. Type 'help' for available commands.")
+
+            except KeyboardInterrupt:
+                print("\nðŸ‘‹ Business automation shutting down...")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {str(e)}")
+
+    def _show_status(self):
+        """Show system status"""
+        summary = self.metrics.get_revenue_summary()
+        print("ðŸ“Š BUSINESS STATUS")
+        print("-" * 20)
+        print(f"ðŸ’° Total Revenue: ${summary['total_all_time']:.2f}")
+        print(f"ðŸ“ˆ Monthly Projection: ${summary['monthly_projection']:.2f}")
+        print(f"ðŸ‘¥ Active Clients: {summary['active_clients']}")
+        print(f"ðŸ“‹ Total Requests: {summary['total_requests']}")
+
+    def _show_revenue_report(self, days):
+        """Show detailed revenue report"""
+        summary = self.metrics.get_revenue_summary(days)
+        print(f"ðŸ“ˆ REVENUE REPORT ({days} days)")
+        print("-" * 30)
+        print(f"Period Revenue: ${summary['period_revenue']:.2f}")
+        print(f"Daily Average: ${summary['daily_average']:.2f}")
+        print(f"Monthly Projection: ${summary['monthly_projection']:.2f}")
+        print(f"Total All-Time: ${summary['total_all_time']:.2f}")
+        print(f"Active Clients: {summary['active_clients']}")
+
+    def _handle_add_client(self, command):
+        """Handle add client command"""
+        parts = command.split()
+        if len(parts) < 4:
+            print("âŒ Usage: client add <name> <email> [package]")
+            return
+
+        name = parts[2]
+        email = parts[3]
+        package = parts[4] if len(parts) > 4 else "basic"
+
+        client = self.client_manager.create_client(name, email, package)
+        if client:
+            print(f"âœ… Client created: {client['client_id']} ({client['name']})")
+        else:
+            print("âŒ Failed to create client")
+
+    def _list_clients(self):
+        """List all clients"""
+        clients = self.metrics.data["clients"]
+        if not clients:
+            print("ðŸ“‹ No clients found")
+            return
+
+        print("ðŸ‘¥ CLIENT LIST")
+        print("-" * 20)
+        for client_id, info in clients.items():
+            print(f"{client_id}: {info['name']} ({info['email']}) - {info['package']} - ${info['total_revenue']:.2f}")
+
+    def _handle_service_request(self, command):
+        """Handle service request command"""
+        parts = command.split(' ', 3)
+        if len(parts) < 4:
+            print("âŒ Usage: service <client_id> <type> <data>")
+            return
+
+        client_id = parts[1]
+        service_type = parts[2]
+        data = parts[3]
+
+        result = self.client_manager.process_service_request(client_id, service_type, data)
+
+        if "error" in result:
+            print(f"âŒ Error: {result['error']}")
+        else:
+            print(f"âœ… Service processed: ${result['cost']:.2f} (Request #{result['request_id']})")
+
+    def _run_demo(self):
+        """Run demonstration scenario"""
+        print("ðŸŽ­ RUNNING BUSINESS DEMO...")
+
+        # Create demo clients
+        client1 = self.client_manager.create_client("Demo Corp", "demo@corp.com", "premium")
+        client2 = self.client_manager.create_client("Startup Inc", "startup@inc.com", "basic")
+
+        print(f"âœ… Created demo clients: {client1['client_id']}, {client2['client_id']}")
+
+        # Process demo services
+        services = [
+            (client1['client_id'], "content_generation", "Create marketing copy for new product launch"),
+            (client1['client_id'], "sentiment_analysis", "Analyze customer feedback data"),
+            (client2['client_id'], "text_summarization", "Summarize this long document"),
+            (client2['client_id'], "translation", "Translate website content to Spanish")
+        ]
+
+        total_demo_revenue = 0
+        for client_id, service, data in services:
+            result = self.client_manager.process_service_request(client_id, service, data)
+            total_demo_revenue += result['cost']
+            print(f"  ðŸ“‹ {service}: ${result['cost']:.2f}")
+
+        print(f"\nðŸŽ¯ Demo completed! Generated ${total_demo_revenue:.2f} in demo revenue")
+        print("Check 'revenue' command to see updated metrics")
+
+def main():
+    """Main entry point"""
+    print("ðŸ’¼ Initializing OASIS 2.0 Business Automation...")
+
+    # Load environment variables if available
+    if os.path.exists('.env'):
+        with open('.env', 'r') as f:
+            for line in f:
+                if line.strip() and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+
+    # Start automation engine
+    engine = AutomationEngine()
+    engine.start_automation_mode()
+
+if __name__ == "__main__":
+    main()

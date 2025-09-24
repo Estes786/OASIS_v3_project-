@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Simple Launcher
+Ultra-lightweight AI system with zero dependency issues
+"""
+
+import os
+import json
+import requests
+import time
+from datetime import datetime
+from pathlib import Path
+
+class SimpleOASIS:
+    """Ultra-simple OASIS implementation"""
+    
+    def __init__(self):
+        self.base_dir = Path(__file__).parent.parent
+        self.hf_token = self._get_token()
+        
+        if not self.hf_token:
+            print("⚠️ HF_TOKEN not found!")
+            print("Please set your Hugging Face token:")
+            token = input("Enter HF_TOKEN: ").strip()
+            if token:
+                self._save_token(token)
+                self.hf_token = token
+            else:
+                print("❌ Token required! Exiting...")
+                exit(1)
+        
+        print(f"✅ OASIS initialized with token: {self.hf_token[:10]}...")
+        
+        self.api_base = "https://api-inference.huggingface.co/models"
+        self.models = {
+            "text_generation": "microsoft/DialoGPT-medium",
+            "text_classification": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "summarization": "facebook/bart-large-cnn"
+        }
+    
+    def _get_token(self):
+        """Get HF token from various sources"""
+        # Try environment variable first
+        token = os.getenv("HF_TOKEN", "").strip()
+        if token and token != "your_hugging_face_token_here":
+            return token
+        
+        # Try config file
+        config_file = self.base_dir / "config" / ".env"
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    for line in f:
+                        if line.startswith("HF_TOKEN="):
+                            token = line.split("=", 1)[1].strip()
+                            if token != "your_hugging_face_token_here":
+                                return token
+            except Exception:
+                pass
+        
+        return None
+    
+    def _save_token(self, token):
+        """Save token to config file"""
+        config_file = self.base_dir / "config" / ".env"
+        config_file.parent.mkdir(exist_ok=True)
+        
+        lines = []
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                lines = f.readlines()
+        
+        # Update or add token
+        token_found = False
+        for i, line in enumerate(lines):
+            if line.startswith("HF_TOKEN="):
+                lines[i] = f"HF_TOKEN={token}\n"
+                token_found = True
+                break
+        
+        if not token_found:
+            lines.append(f"HF_TOKEN={token}\n")
+        
+        with open(config_file, 'w') as f:
+            f.writelines(lines)
+        
+        print(f"✅ Token saved to {config_file}")
+    
+    def call_api(self, model_name, prompt):
+        """Make API call to Hugging Face"""
+        url = f"{self.api_base}/{model_name}"
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+        payload = {"inputs": prompt}
+        
+        print(f"📡 Calling {model_name}...")
+        
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response.raise_for_status()
+            return {"status": "success", "result": response.json()}
+        except requests.exceptions.RequestException as e:
+            print(f"❌ API Error: {e}")
+            return {"status": "error", "error": str(e)}
+    
+    def text_generation(self, prompt):
+        """Generate text"""
+        result = self.call_api(self.models["text_generation"], prompt)
+        if result["status"] == "success":
+            try:
+                text = result["result"][0]["generated_text"]
+                return text
+            except Exception:
+                return str(result["result"])
+        return f"Error: {result.get('error', 'Unknown error')}"
+    
+    def text_classification(self, text):
+        """Classify text"""
+        result = self.call_api(self.models["text_classification"], text)
+        if result["status"] == "success":
+            try:
+                return result["result"][0]
+            except Exception:
+                return result["result"]
+        return f"Error: {result.get('error', 'Unknown error')}"
+    
+    def summarization(self, text):
+        """Summarize text"""
+        result = self.call_api(self.models["summarization"], text)
+        if result["status"] == "success":
+            try:
+                return result["result"][0]["summary_text"]
+            except Exception:
+                return str(result["result"])
+        return f"Error: {result.get('error', 'Unknown error')}"
+    
+    def interactive_mode(self):
+        """Interactive mode"""
+        print("\n🎮 OASIS Interactive Mode")
+        print("="*40)
+        print("Commands:")
+        print("1 - Text Generation")
+        print("2 - Text Classification")
+        print("3 - Text Summarization")
+        print("q - Quit")
+        print("="*40)
+        
+        while True:
+            try:
+                choice = input("\n🚀 Enter choice: ").strip()
+                
+                if choice.lower() == 'q':
+                    print("👋 Goodbye!")
+                    break
+                
+                elif choice == '1':
+                    prompt = input("Enter prompt: ").strip()
+                    if prompt:
+                        print("🤖 Generating...")
+                        result = self.text_generation(prompt)
+                        print(f"📝 Result: {result}")
+                
+                elif choice == '2':
+                    text = input("Enter text to classify: ").strip()
+                    if text:
+                        print("📊 Classifying...")
+                        result = self.text_classification(text)
+                        print(f"📊 Result: {result}")
+                
+                elif choice == '3':
+                    text = input("Enter text to summarize: ").strip()
+                    if text:
+                        print("📝 Summarizing...")
+                        result = self.summarization(text)
+                        print(f"📋 Summary: {result}")
+                
+                else:
+                    print("❓ Invalid choice")
+            
+            except KeyboardInterrupt:
+                print("\n👋 Interrupted! Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+
+def main():
+    """Main function"""
+    print("🌟 OASIS 2.0 - ULTRA-LIGHTWEIGHT AI SYSTEM 🌟")
+    print("Pure API-First Architecture | Zero Heavy Dependencies")
+    print("=" * 60)
+    
+    try:
+        oasis = SimpleOASIS()
+        oasis.interactive_mode()
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+
+if __name__ == "__main__":
+    main()

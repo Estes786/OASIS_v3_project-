@@ -1,0 +1,336 @@
+"# ðŸ“¡ OASIS v3 - API Documentation
+
+Complete API reference for OASIS v3 AI Processing Hub.
+
+## ðŸ”— Base URL
+
+```
+https://your-space-name.hf.space
+```
+
+## ðŸ” Authentication
+
+Currently no authentication required. In production, implement API keys:
+
+```http
+Authorization: Bearer your-api-key
+X-Session-ID: your-session-id
+```
+
+## ðŸ“‹ API Endpoints
+
+### Health Check
+
+**GET** `/api/v3/health`
+
+Check system health and status.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "version": "3.0.0-production",
+  "uptime": 3600
+}
+```
+
+### Sentiment Analysis
+
+**POST** `/api/v3/sentiment`
+
+Analyze sentiment of provided text.
+
+**Request:**
+```json
+{
+  "text": "OASIS v3 is revolutionary!",
+  "model": "sentiment"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sentiment": {
+      "dominant_sentiment": "POSITIVE",
+      "confidence": 0.9234,
+      "predictions": [
+        {"label": "POSITIVE", "score": 0.9234},
+        {"label": "NEUTRAL", "score": 0.0543},
+        {"label": "NEGATIVE", "score": 0.0223}
+      ]
+    },
+    "processing_time": 0.1234,
+    "text_length": 24
+  }
+}
+```
+
+### Batch Processing
+
+**POST** `/api/v3/batch`
+
+Process multiple AI tasks in a single request.
+
+**Request:**
+```json
+{
+  "requests": [
+    {"type": "sentiment", "data": "First text", "id": "req1"},
+    {"type": "sentiment", "data": "Second text", "id": "req2"}
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "batch_results": [
+      {
+        "request_id": "req1",
+        "type": "sentiment", 
+        "result": { /* sentiment analysis result */ }
+      }
+    ],
+    "total_requests": 2,
+    "batch_processing_time": 0.2567
+  }
+}
+```
+
+### System Statistics
+
+**GET** `/api/v3/stats`
+
+Get comprehensive system statistics.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "system": {
+      "version": "3.0.0-production",
+      "uptime_seconds": 86400,
+      "status": "operational"
+    },
+    "performance": {
+      "total_requests": 15234,
+      "average_processing_time": 0.1456,
+      "requests_per_second": 12.34
+    },
+    "revenue": {
+      "total_revenue": 152.34,
+      "total_requests": 15234,
+      "daily_revenue": {"2024-01-15": 25.67}
+    }
+  }
+}
+```
+
+### Available Models
+
+**GET** `/api/v3/models`
+
+List all available AI models.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "models": {
+      "sentiment": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+      "emotion": "j-hartmann/emotion-english-distilroberta-base",
+      "image_classification": "google/vit-base-patch16-224"
+    },
+    "total_count": 10
+  }
+}
+```
+
+## ðŸ Python Examples
+
+### Using urllib (Termux Compatible)
+
+```python
+import urllib.request
+import urllib.parse
+import json
+
+def call_oasis_api(endpoint, data=None):
+    url = f"https://your-space.hf.space{endpoint}"
+
+    if data:
+        # POST request
+        json_data = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(url, data=json_data,
+            headers={'Content-Type': 'application/json'})
+    else:
+        # GET request
+        req = urllib.request.Request(url)
+
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+# Sentiment analysis
+result = call_oasis_api('/api/v3/sentiment', {
+    'text': 'OASIS v3 is amazing!',
+    'model': 'sentiment'
+})
+print(result)
+
+# Health check
+health = call_oasis_api('/api/v3/health')
+print(health)
+```
+
+### Using requests (if available)
+
+```python
+import requests
+
+base_url = "https://your-space.hf.space"
+
+# Sentiment analysis
+response = requests.post(f"{base_url}/api/v3/sentiment", 
+    json={"text": "OASIS v3 rocks!", "model": "sentiment"})
+print(response.json())
+
+# Health check  
+response = requests.get(f"{base_url}/api/v3/health")
+print(response.json())
+```
+
+## ðŸ”§ Error Handling
+
+All API endpoints return standardized error responses:
+
+```json
+{
+  "success": false,
+  "error": "Error description",
+  "status_code": 400,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### Common Error Codes
+
+- **400**: Bad Request - Invalid input parameters
+- **404**: Not Found - Endpoint does not exist  
+- **429**: Rate Limited - Too many requests
+- **500**: Internal Error - Server processing error
+- **503**: Service Unavailable - Temporary unavailability
+
+## âš¡ Performance Optimization
+
+### Batch Processing
+
+Use batch endpoints for multiple requests:
+
+```python
+batch_data = {
+    "requests": [
+        {"type": "sentiment", "data": text1, "id": "1"},
+        {"type": "sentiment", "data": text2, "id": "2"}
+    ]
+}
+result = call_oasis_api('/api/v3/batch', batch_data)
+```
+
+### Timeout Configuration
+
+Set appropriate timeouts for your use case:
+
+```python
+# Quick responses
+with urllib.request.urlopen(req, timeout=5) as response:
+    pass
+
+# Complex processing  
+with urllib.request.urlopen(req, timeout=60) as response:
+    pass
+```
+
+## ðŸ’¼ Business Integration
+
+### Revenue Tracking
+
+Monitor usage and revenue through `/api/v3/stats`:
+
+```python
+stats = call_oasis_api('/api/v3/stats')
+revenue = stats['data']['revenue']['total_revenue']
+requests = stats['data']['performance']['total_requests']
+avg_value = revenue / requests if requests > 0 else 0
+```
+
+### Usage Analytics
+
+Track performance metrics for optimization:
+
+```python
+stats = call_oasis_api('/api/v3/stats')
+performance = stats['data']['performance']
+print(f"Avg processing time: {performance['average_processing_time']:.3f}s")
+print(f"Requests per second: {performance['requests_per_second']:.2f}")
+```
+
+## ðŸš€ Production Deployment
+
+### Rate Limiting
+
+Implement client-side rate limiting:
+
+```python
+import time
+
+class RateLimiter:
+    def __init__(self, max_calls_per_second=10):
+        self.max_calls = max_calls_per_second
+        self.calls = []
+
+    def wait_if_needed(self):
+        now = time.time()
+        # Remove calls older than 1 second
+        self.calls = [call_time for call_time in self.calls if now - call_time < 1]
+
+        if len(self.calls) >= self.max_calls:
+            time.sleep(1 - (now - self.calls[0]))
+
+        self.calls.append(now)
+
+# Usage
+limiter = RateLimiter(max_calls_per_second=5)
+limiter.wait_if_needed()
+result = call_oasis_api('/api/v3/sentiment', data)
+```
+
+### Error Retry Logic
+
+Implement robust retry mechanisms:
+
+```python
+import time
+import random
+
+def call_with_retry(endpoint, data=None, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return call_oasis_api(endpoint, data)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e
+            wait_time = (2 ** attempt) + random.uniform(0, 1)
+            time.sleep(wait_time)
+```
+
+---
+
+**For more examples and advanced usage, visit the live documentation at `/docs`**"

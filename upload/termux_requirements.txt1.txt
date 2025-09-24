@@ -1,0 +1,24 @@
+"# OASIS v3 Termux Requirements
+# ULTRA-MINIMAL: Only Python standard library + urllib
+# NO EXTERNAL DEPENDENCIES
+
+# Note: These are built-in to Python, no installation needed:
+# - urllib (HTTP requests)
+# - json (JSON processing)
+# - time (timing functions)
+# - datetime (date/time handling)
+# - os (system operations)
+# - sys (system interface)
+
+# EXPLICITLY FORBIDDEN in Termux:
+# âŒ requests
+# âŒ numpy
+# âŒ pandas 
+# âŒ torch
+# âŒ transformers
+# âŒ scikit-learn
+# âŒ gradio
+# âŒ matplotlib
+# âŒ tensorflow
+
+# Total Termux footprint: <1MB (pure Python only)"

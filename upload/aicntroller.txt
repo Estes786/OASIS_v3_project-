@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 Hugging Face Controller
+Ultra-Lightweight AI Operations Center
+
+This is the heart of OASIS 2.0 - managing all AI operations through Hugging Face APIs
+without heavy local dependencies. Pure Python approach for maximum efficiency.
+"""
+
+import os
+import sys
+import json
+import time
+import logging
+from datetime import datetime
+from urllib.request import urlopen, Request
+from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+
+# Add config to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'config'))
+
+try:
+    from settings import *
+except ImportError:
+    print("âŒ Configuration not found! Run setup script first.")
+    sys.exit(1)
+
+class OASISLogger:
+    """Ultra-lightweight logging system"""
+
+    def __init__(self, log_file="logs/oasis.log"):
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger('OASIS')
+
+    def info(self, message):
+        self.logger.info(f"ðŸŸ¢ {message}")
+
+    def warning(self, message):
+        self.logger.warning(f"ðŸŸ¡ {message}")
+
+    def error(self, message):
+        self.logger.error(f"ðŸ”´ {message}")
+
+    def success(self, message):
+        self.logger.info(f"âœ… {message}")
+
+class HuggingFaceClient:
+    """Ultra-lightweight Hugging Face API client using only built-in libraries"""
+
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = HF_API_BASE
+        self.models_api = HF_MODELS_API
+        self.logger = OASISLogger()
+
+        if not api_key:
+            self.logger.error("Hugging Face API key not provided!")
+            raise ValueError("HF_API_KEY required")
+
+    def _make_request(self, url, data=None, method='GET'):
+        """Make HTTP request using built-in urllib"""
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json',
+            'User-Agent': 'OASIS-2.0-Controller'
+        }
+
+        try:
+            if data and method == 'POST':
+                data = json.dumps(data).encode('utf-8')
+                request = Request(url, data=data, headers=headers, method=method)
+            else:
+                request = Request(url, headers=headers, method=method)
+
+            with urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode('utf-8'))
+
+        except HTTPError as e:
+            self.logger.error(f"HTTP Error {e.code}: {e.reason}")
+            return {"error": f"HTTP {e.code}: {e.reason}"}
+        except URLError as e:
+            self.logger.error(f"URL Error: {e.reason}")
+            return {"error": f"Connection error: {e.reason}"}
+        except Exception as e:
+            self.logger.error(f"Request failed: {str(e)}")
+            return {"error": str(e)}
+
+    def generate_text(self, model, prompt, max_length=150, temperature=0.7):
+        """Generate text using Hugging Face inference API"""
+        url = f"{self.base_url}/models/{model}"
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_length": max_length,
+                "temperature": temperature,
+                "do_sample": True
+            }
+        }
+
+        self.logger.info(f"Generating text with model: {model}")
+        result = self._make_request(url, payload, 'POST')
+
+        if "error" in result:
+            self.logger.error(f"Text generation failed: {result['error']}")
+            return result
+
+        self.logger.success(f"Text generated successfully ({len(str(result))} chars)")
+        return result
+
+    def analyze_sentiment(self, text):
+        """Analyze sentiment using Hugging Face models"""
+        model = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+        url = f"{self.base_url}/models/{model}"
+
+        payload = {"inputs": text}
+
+        self.logger.info("Analyzing sentiment...")
+        result = self._make_request(url, payload, 'POST')
+
+        if "error" in result:
+            self.logger.error(f"Sentiment analysis failed: {result['error']}")
+            return result
+
+        self.logger.success("Sentiment analysis completed")
+        return result
+
+    def summarize_text(self, text, max_length=130, min_length=30):
+        """Summarize text using Hugging Face models"""
+        model = "facebook/bart-large-cnn"
+        url = f"{self.base_url}/models/{model}"
+
+        payload = {
+            "inputs": text,
+            "parameters": {
+                "max_length": max_length,
+                "min_length": min_length,
+                "do_sample": False
+            }
+        }
+
+        self.logger.info("Summarizing text...")
+        result = self._make_request(url, payload, 'POST')
+
+        if "error" in result:
+            self.logger.error(f"Summarization failed: {result['error']}")
+            return result
+
+        self.logger.success("Text summarization completed")
+        return result
+
+    def translate_text(self, text, source_lang="en", target_lang="fr"):
+        """Translate text using Hugging Face models"""
+        model = f"Helsinki-NLP/opus-mt-{source_lang}-{target_lang}"
+        url = f"{self.base_url}/models/{model}"
+
+        payload = {"inputs": text}
+
+        self.logger.info(f"Translating {source_lang} -> {target_lang}")
+        result = self._make_request(url, payload, 'POST')
+
+        if "error" in result:
+            self.logger.error(f"Translation failed: {result['error']}")
+            return result
+
+        self.logger.success("Translation completed")
+        return result
+
+    def get_model_info(self, model_name):
+        """Get information about a specific model"""
+        url = f"{self.models_api}/models/{model_name}"
+
+        self.logger.info(f"Fetching model info: {model_name}")
+        result = self._make_request(url)
+
+        if "error" in result:
+            self.logger.error(f"Model info fetch failed: {result['error']}")
+            return result
+
+        self.logger.success("Model information retrieved")
+        return result
+
+    def list_models(self, search=None, limit=10):
+        """List available models"""
+        url = f"{self.models_api}/models"
+
+        if search:
+            url += f"?search={search}&limit={limit}"
+        else:
+            url += f"?limit={limit}"
+
+        self.logger.info(f"Listing models (limit: {limit})")
+        result = self._make_request(url)
+
+        if "error" in result:
+            self.logger.error(f"Model listing failed: {result['error']}")
+            return result
+
+        self.logger.success(f"Retrieved {len(result)} models")
+        return result
+
+class OASISController:
+    """Main OASIS 2.0 Controller - Ultra-lightweight operations center"""
+
+    def __init__(self):
+        self.logger = OASISLogger()
+        self.hf_client = None
+        self.startup_time = datetime.now()
+        self.request_count = 0
+
+        # Initialize Hugging Face client
+        try:
+            api_key = os.getenv('HF_API_KEY')
+            if not api_key:
+                raise ValueError("HF_API_KEY not found in environment")
+
+            self.hf_client = HuggingFaceClient(api_key)
+            self.logger.success("OASIS 2.0 Controller initialized successfully")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize controller: {str(e)}")
+            sys.exit(1)
+
+    def get_status(self):
+        """Get system status"""
+        uptime = datetime.now() - self.startup_time
+        return {
+            "status": "running",
+            "version": OASIS_VERSION,
+            "uptime_seconds": uptime.total_seconds(),
+            "requests_processed": self.request_count,
+            "memory_info": self._get_memory_info(),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    def _get_memory_info(self):
+        """Get basic memory information"""
+        try:
+            import resource
+            memory_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            return {"max_memory_kb": memory_usage}
+        except:
+            return {"max_memory_kb": "unknown"}
+
+    def process_request(self, request_type, **kwargs):
+        """Process various AI requests"""
+        self.request_count += 1
+        self.logger.info(f"Processing request: {request_type}")
+
+        try:
+            if request_type == "generate_text":
+                return self.hf_client.generate_text(**kwargs)
+            elif request_type == "sentiment_analysis":
+                return self.hf_client.analyze_sentiment(kwargs.get('text', ''))
+            elif request_type == "summarization":
+                return self.hf_client.summarize_text(kwargs.get('text', ''))
+            elif request_type == "translation":
+                return self.hf_client.translate_text(**kwargs)
+            elif request_type == "model_info":
+                return self.hf_client.get_model_info(kwargs.get('model_name', ''))
+            elif request_type == "list_models":
+                return self.hf_client.list_models(**kwargs)
+            else:
+                return {"error": f"Unknown request type: {request_type}"}
+
+        except Exception as e:
+            self.logger.error(f"Request processing failed: {str(e)}")
+            return {"error": str(e)}
+
+    def start_interactive_mode(self):
+        """Start interactive command-line mode"""
+        self.logger.success("ðŸš€ OASIS 2.0 Interactive Mode Started")
+        print("\n" + "="*50)
+        print("ðŸ¤– OASIS 2.0 ULTRA-LIGHTWEIGHT CONTROLLER")
+        print("="*50)
+        print("Available commands:")
+        print("  generate <prompt>     - Generate text")
+        print("  sentiment <text>      - Analyze sentiment")
+        print("  summarize <text>      - Summarize text")
+        print("  translate <text>      - Translate text")
+        print("  models [search]       - List models")
+        print("  status               - System status")
+        print("  help                 - Show this help")
+        print("  exit                 - Exit OASIS")
+        print("="*50)
+
+        while True:
+            try:
+                command = input("\nðŸŽ¯ OASIS> ").strip()
+
+                if command.lower() in ['exit', 'quit', 'q']:
+                    print("ðŸ‘‹ OASIS 2.0 shutting down...")
+                    break
+                elif command.lower() in ['help', 'h']:
+                    print("Available commands: generate, sentiment, summarize, translate, models, status, exit")
+                elif command.lower() == 'status':
+                    status = self.get_status()
+                    print(f"ðŸ“Š Status: {status['status']}")
+                    print(f"â±ï¸  Uptime: {status['uptime_seconds']:.1f}s")
+                    print(f"ðŸ“ˆ Requests: {status['requests_processed']}")
+                elif command.startswith('generate '):
+                    prompt = command[9:]
+                    result = self.process_request("generate_text", model="gpt2", prompt=prompt)
+                    self._print_result(result)
+                elif command.startswith('sentiment '):
+                    text = command[10:]
+                    result = self.process_request("sentiment_analysis", text=text)
+                    self._print_result(result)
+                elif command.startswith('summarize '):
+                    text = command[10:]
+                    result = self.process_request("summarization", text=text)
+                    self._print_result(result)
+                elif command.startswith('translate '):
+                    text = command[10:]
+                    result = self.process_request("translation", text=text)
+                    self._print_result(result)
+                elif command.startswith('models'):
+                    search_term = command[6:].strip() if len(command) > 6 else None
+                    result = self.process_request("list_models", search=search_term, limit=5)
+                    self._print_models(result)
+                else:
+                    print("â“ Unknown command. Type 'help' for available commands.")
+
+            except KeyboardInterrupt:
+                print("\nðŸ‘‹ OASIS 2.0 shutting down...")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {str(e)}")
+
+    def _print_result(self, result):
+        """Print API result in a formatted way"""
+        if "error" in result:
+            print(f"âŒ Error: {result['error']}")
+        else:
+            print("âœ… Result:")
+            print(json.dumps(result, indent=2))
+
+    def _print_models(self, result):
+        """Print model list in a formatted way"""
+        if "error" in result:
+            print(f"âŒ Error: {result['error']}")
+        else:
+            print("ðŸ¤– Available Models:")
+            for i, model in enumerate(result[:5], 1):
+                print(f"  {i}. {model.get('id', 'Unknown')}")
+
+def main():
+    """Main entry point"""
+    print("ðŸš€ Initializing OASIS 2.0 Ultra-Lightweight Controller...")
+
+    # Load environment variables
+    if os.path.exists('.env'):
+        with open('.env', 'r') as f:
+            for line in f:
+                if line.strip() and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+
+    # Initialize controller
+    controller = OASISController()
+
+    # Start interactive mode
+    controller.start_interactive_mode()
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,381 @@
+""""
+OASIS v3 Business Automation
+Ultra-lightweight workflow automation for client management and business operations.
+"""
+
+import json
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, asdict
+from enum import Enum
+
+class TaskStatus(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress" 
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class TaskPriority(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+@dataclass
+class AutomationTask:
+    """Automation task definition"""
+    task_id: str
+    title: str
+    description: str
+    task_type: str
+    priority: TaskPriority
+    status: TaskStatus
+    created_at: str
+    due_date: str
+    assigned_to: str
+    metadata: Dict[str, Any]
+
+@dataclass
+class ClientTicket:
+    """Support ticket for client issues"""
+    ticket_id: str
+    client_id: str
+    subject: str
+    priority: str
+    status: str
+    created_at: str
+    last_updated: str
+    messages: List[Dict[str, str]]
+
+@dataclass
+class BusinessWorkflow:
+    """Business process workflow definition"""
+    workflow_id: str
+    name: str
+    description: str
+    steps: List[Dict[str, Any]]
+    triggers: List[str]
+    is_active: bool
+
+class OasisBusinessAutomation:
+    """
+    Comprehensive business automation engine for OASIS v3.
+    Handles client lifecycle, support workflows, and operational tasks.
+    """
+
+    def __init__(self):
+        self.tasks = {}
+        self.tickets = {}
+        self.workflows = self._initialize_workflows()
+        self.client_interactions = {}
+
+    def _initialize_workflows(self) -> Dict[str, BusinessWorkflow]:
+        """Initialize predefined business workflows"""
+        return {
+            "onboarding": BusinessWorkflow(
+                workflow_id="onboarding",
+                name="Client Onboarding",
+                description="Automated client onboarding process",
+                steps=[
+                    {"step": "send_welcome_email", "delay_hours": 0},
+                    {"step": "create_api_credentials", "delay_hours": 1},
+                    {"step": "schedule_demo_call", "delay_hours": 24},
+                    {"step": "send_getting_started_guide", "delay_hours": 48}
+                ],
+                triggers=["new_client_signup"],
+                is_active=True
+            ),
+            "churn_prevention": BusinessWorkflow(
+                workflow_id="churn_prevention", 
+                name="Churn Prevention",
+                description="Automated actions to prevent client churn",
+                steps=[
+                    {"step": "send_check_in_email", "delay_hours": 0},
+                    {"step": "offer_support_call", "delay_hours": 24},
+                    {"step": "provide_usage_insights", "delay_hours": 72},
+                    {"step": "escalate_to_account_manager", "delay_hours": 168}
+                ],
+                triggers=["low_usage_detected", "support_ticket_created"],
+                is_active=True
+            ),
+            "upsell_campaign": BusinessWorkflow(
+                workflow_id="upsell_campaign",
+                name="Upsell Opportunity",
+                description="Automated upselling based on usage patterns",
+                steps=[
+                    {"step": "analyze_usage_pattern", "delay_hours": 0},
+                    {"step": "send_upgrade_recommendation", "delay_hours": 1},
+                    {"step": "schedule_consultation", "delay_hours": 72},
+                    {"step": "send_limited_time_offer", "delay_hours": 168}
+                ],
+                triggers=["usage_threshold_exceeded", "tier_limit_reached"],
+                is_active=True
+            )
+        }
+
+    def create_task(self, title: str, description: str, task_type: str, 
+                   priority: TaskPriority, assigned_to: str, 
+                   due_hours: int = 24, **metadata) -> str:
+        """Create a new automation task"""
+        task_id = f"task_{len(self.tasks) + 1}_{int(datetime.now().timestamp())}"
+
+        due_date = (datetime.now() + timedelta(hours=due_hours)).isoformat()
+
+        task = AutomationTask(
+            task_id=task_id,
+            title=title,
+            description=description,
+            task_type=task_type,
+            priority=priority,
+            status=TaskStatus.PENDING,
+            created_at=datetime.now().isoformat(),
+            due_date=due_date,
+            assigned_to=assigned_to,
+            metadata=metadata
+        )
+
+        self.tasks[task_id] = task
+        return task_id
+
+    def update_task_status(self, task_id: str, status: TaskStatus, 
+                          notes: Optional[str] = None) -> bool:
+        """Update task status"""
+        if task_id not in self.tasks:
+            return False
+
+        self.tasks[task_id].status = status
+        if notes:
+            self.tasks[task_id].metadata["status_notes"] = notes
+
+        return True
+
+    def create_support_ticket(self, client_id: str, subject: str, 
+                            priority: str, initial_message: str) -> str:
+        """Create a new support ticket"""
+        ticket_id = f"ticket_{len(self.tickets) + 1}_{int(datetime.now().timestamp())}"
+
+        ticket = ClientTicket(
+            ticket_id=ticket_id,
+            client_id=client_id,
+            subject=subject,
+            priority=priority,
+            status="open",
+            created_at=datetime.now().isoformat(),
+            last_updated=datetime.now().isoformat(),
+            messages=[{
+                "sender": "client",
+                "message": initial_message,
+                "timestamp": datetime.now().isoformat()
+            }]
+        )
+
+        self.tickets[ticket_id] = ticket
+
+        # Trigger churn prevention workflow if high priority
+        if priority in ["high", "urgent"]:
+            self.trigger_workflow("churn_prevention", {"client_id": client_id, "ticket_id": ticket_id})
+
+        return ticket_id
+
+    def add_ticket_message(self, ticket_id: str, sender: str, message: str) -> bool:
+        """Add message to support ticket"""
+        if ticket_id not in self.tickets:
+            return False
+
+        self.tickets[ticket_id].messages.append({
+            "sender": sender,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        self.tickets[ticket_id].last_updated = datetime.now().isoformat()
+        return True
+
+    def trigger_workflow(self, workflow_id: str, context: Dict[str, Any]) -> List[str]:
+        """Trigger a business workflow"""
+        if workflow_id not in self.workflows:
+            return []
+
+        workflow = self.workflows[workflow_id]
+        if not workflow.is_active:
+            return []
+
+        created_tasks = []
+
+        for i, step in enumerate(workflow.steps):
+            task_id = self.create_task(
+                title=f"{workflow.name} - Step {i+1}",
+                description=f"Execute {step['step']} for {workflow_id}",
+                task_type=f"workflow_{workflow_id}",
+                priority=TaskPriority.MEDIUM,
+                assigned_to="automation_system",
+                due_hours=step.get("delay_hours", 24),
+                workflow_step=step["step"],
+                workflow_context=context
+            )
+            created_tasks.append(task_id)
+
+        return created_tasks
+
+    def process_client_interaction(self, client_id: str, interaction_type: str, 
+                                 data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process and analyze client interactions"""
+        timestamp = datetime.now().isoformat()
+
+        if client_id not in self.client_interactions:
+            self.client_interactions[client_id] = []
+
+        interaction = {
+            "timestamp": timestamp,
+            "type": interaction_type,
+            "data": data
+        }
+
+        self.client_interactions[client_id].append(interaction)
+
+        # Analyze interaction patterns and trigger workflows
+        analysis = self._analyze_interaction_patterns(client_id)
+
+        # Auto-trigger workflows based on patterns
+        triggered_workflows = []
+
+        if analysis["usage_trend"] == "declining":
+            workflows = self.trigger_workflow("churn_prevention", {"client_id": client_id})
+            triggered_workflows.extend(workflows)
+
+        if analysis["usage_level"] == "high" and analysis["tier_utilization"] > 0.8:
+            workflows = self.trigger_workflow("upsell_campaign", {"client_id": client_id})
+            triggered_workflows.extend(workflows)
+
+        return {
+            "interaction_logged": True,
+            "analysis": analysis,
+            "triggered_workflows": triggered_workflows
+        }
+
+    def _analyze_interaction_patterns(self, client_id: str) -> Dict[str, Any]:
+        """Analyze client interaction patterns"""
+        interactions = self.client_interactions.get(client_id, [])
+
+        if not interactions:
+            return {"status": "insufficient_data"}
+
+        # Mock analysis based on interaction patterns
+        recent_interactions = [i for i in interactions 
+                             if datetime.fromisoformat(i["timestamp"]) > datetime.now() - timedelta(days=30)]
+
+        usage_count = len([i for i in recent_interactions if i["type"] == "api_usage"])
+        support_count = len([i for i in recent_interactions if i["type"] == "support_request"])
+
+        return {
+            "total_interactions": len(interactions),
+            "recent_interactions": len(recent_interactions),
+            "usage_frequency": usage_count,
+            "support_requests": support_count,
+            "usage_trend": "declining" if usage_count < 5 else "stable",
+            "usage_level": "high" if usage_count > 50 else "medium" if usage_count > 10 else "low",
+            "tier_utilization": 0.75,  # Mock utilization
+            "satisfaction_indicator": "positive" if support_count < 2 else "needs_attention"
+        }
+
+    def get_pending_tasks(self, assigned_to: Optional[str] = None) -> List[Dict]:
+        """Get pending tasks, optionally filtered by assignee"""
+        pending_tasks = [
+            asdict(task) for task in self.tasks.values() 
+            if task.status == TaskStatus.PENDING
+        ]
+
+        if assigned_to:
+            pending_tasks = [t for t in pending_tasks if t["assigned_to"] == assigned_to]
+
+        # Sort by priority and due date
+        priority_order = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+        pending_tasks.sort(key=lambda x: (
+            priority_order.get(x["priority"].value if hasattr(x["priority"], "value") else x["priority"], 4),
+            x["due_date"]
+        ))
+
+        return pending_tasks
+
+    def get_open_tickets(self, priority: Optional[str] = None) -> List[Dict]:
+        """Get open support tickets"""
+        open_tickets = [
+            asdict(ticket) for ticket in self.tickets.values()
+            if ticket.status == "open"
+        ]
+
+        if priority:
+            open_tickets = [t for t in open_tickets if t["priority"] == priority]
+
+        return sorted(open_tickets, key=lambda x: x["created_at"], reverse=True)
+
+    def generate_automation_report(self) -> Dict[str, Any]:
+        """Generate comprehensive automation status report"""
+        total_tasks = len(self.tasks)
+        completed_tasks = len([t for t in self.tasks.values() if t.status == TaskStatus.COMPLETED])
+        pending_tasks = len([t for t in self.tasks.values() if t.status == TaskStatus.PENDING])
+
+        open_tickets = len([t for t in self.tickets.values() if t.status == "open"])
+        high_priority_tickets = len([t for t in self.tickets.values() 
+                                   if t.status == "open" and t.priority in ["high", "urgent"]])
+
+        active_workflows = len([w for w in self.workflows.values() if w.is_active])
+
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "task_summary": {
+                "total_tasks": total_tasks,
+                "completed_tasks": completed_tasks,
+                "pending_tasks": pending_tasks,
+                "completion_rate": (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+            },
+            "ticket_summary": {
+                "open_tickets": open_tickets,
+                "high_priority_tickets": high_priority_tickets,
+                "total_tickets": len(self.tickets)
+            },
+            "workflow_summary": {
+                "active_workflows": active_workflows,
+                "total_workflows": len(self.workflows)
+            },
+            "client_interactions": {
+                "total_clients": len(self.client_interactions),
+                "interactions_today": sum(
+                    len([i for i in interactions 
+                        if datetime.fromisoformat(i["timestamp"]).date() == datetime.now().date()])
+                    for interactions in self.client_interactions.values()
+                )
+            }
+        }
+
+# Usage example
+if __name__ == "__main__":
+    automation = OasisBusinessAutomation()
+
+    # Create sample task
+    task_id = automation.create_task(
+        title="Follow up with enterprise client",
+        description="Check on integration progress",
+        task_type="client_management",
+        priority=TaskPriority.HIGH,
+        assigned_to="account_manager"
+    )
+
+    # Create sample ticket
+    ticket_id = automation.create_support_ticket(
+        client_id="client_001",
+        subject="API Integration Issue",
+        priority="high",
+        initial_message="Having trouble with authentication flow"
+    )
+
+    # Process client interaction
+    result = automation.process_client_interaction(
+        client_id="client_001",
+        interaction_type="api_usage",
+        data={"requests": 150, "errors": 2}
+    )
+
+    print(f"âœ… Created task: {task_id}")
+    print(f"âœ… Created ticket: {ticket_id}")
+    print(f"âœ… Processed interaction: {result['triggered_workflows']}")"

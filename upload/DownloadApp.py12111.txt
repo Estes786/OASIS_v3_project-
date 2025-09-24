@@ -1,0 +1,661 @@
+""""
+OASIS v3 Orchestrator - Central Command Center API
+HuggingFace Spaces Application for System Coordination
+
+This Space serves as the central command center that orchestrates
+the entire OASIS ecosystem. It manages:
+- Service registry and health monitoring
+- API request routing and load balancing
+- Termux client registration and session management
+- Revenue aggregation and analytics
+- Real-time system monitoring and alerts
+
+Author: OASIS Development Team
+License: MIT
+"""
+
+import gradio as gr
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import uvicorn
+import requests
+import json
+import time
+import asyncio
+import threading
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Tuple
+import logging
+from dataclasses import dataclass, field
+from collections import defaultdict, deque
+import uuid
+import hashlib
+import jwt
+from contextlib import asynccontextmanager
+import aiohttp
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Security
+security = HTTPBearer()
+SECRET_KEY = "oasis-v3-orchestrator-secret-2024"
+
+@dataclass
+class ServiceInfo:
+    """Service registration information"""
+    service_id: str
+    service_name: str
+    service_url: str
+    service_type: str  # 'api-processor', 'ui-interface', 'termux-client'
+    status: str = "active"  # 'active', 'inactive', 'error'
+    last_heartbeat: datetime = field(default_factory=datetime.now)
+    response_time: float = 0.0
+    total_requests: int = 0
+    error_count: int = 0
+    metadata: Dict = field(default_factory=dict)
+
+@dataclass 
+class TermuxClient:
+    """Termux client information"""
+    client_id: str
+    session_id: str
+    registration_time: datetime
+    last_activity: datetime
+    requests_made: int = 0
+    revenue_generated: float = 0.0
+    device_info: Dict = field(default_factory=dict)
+    status: str = "active"
+
+class OASISOrchestrator:
+    """Main orchestrator for OASIS ecosystem"""
+
+    def __init__(self):
+        # Service registry
+        self.services: Dict[str, ServiceInfo] = {}
+        self.termux_clients: Dict[str, TermuxClient] = {}
+
+        # System statistics
+        self.system_stats = {
+            "total_requests": 0,
+            "total_revenue": 0.0,
+            "active_services": 0,
+            "active_clients": 0,
+            "start_time": datetime.now(),
+            "last_health_check": None,
+            "error_count": 0,
+            "avg_response_time": 0.0
+        }
+
+        # Request history for analytics
+        self.request_history = deque(maxlen=1000)
+        self.revenue_history = deque(maxlen=1000)
+
+        # Health monitoring
+        self.health_check_interval = 30  # seconds
+        self.max_error_threshold = 10
+
+        # Start background tasks
+        self.start_background_monitoring()
+
+        logger.info("OASIS Orchestrator initialized successfully")
+
+    def start_background_monitoring(self):
+        """Start background health monitoring"""
+        def health_monitor():
+            while True:
+                try:
+                    asyncio.run(self.check_service_health())
+                    self.cleanup_inactive_clients()
+                    time.sleep(self.health_check_interval)
+                except Exception as e:
+                    logger.error(f"Health monitor error: {str(e)}")
+                    time.sleep(10)
+
+        thread = threading.Thread(target=health_monitor, daemon=True)
+        thread.start()
+        logger.info("Background health monitoring started")
+
+    async def check_service_health(self):
+        """Check health of all registered services"""
+        self.system_stats["last_health_check"] = datetime.now()
+        active_count = 0
+        total_response_time = 0
+
+        for service_id, service in self.services.items():
+            try:
+                start_time = time.time()
+
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                    async with session.get(f"{service.service_url}/health", timeout=5) as response:
+                        if response.status == 200:
+                            service.status = "active"
+                            service.last_heartbeat = datetime.now()
+                            active_count += 1
+                        else:
+                            service.status = "error"
+                            service.error_count += 1
+
+                response_time = time.time() - start_time
+                service.response_time = response_time
+                total_response_time += response_time
+
+            except Exception as e:
+                service.status = "error" 
+                service.error_count += 1
+                logger.warning(f"Service {service_id} health check failed: {str(e)}")
+
+        self.system_stats["active_services"] = active_count
+        if len(self.services) > 0:
+            self.system_stats["avg_response_time"] = total_response_time / len(self.services)
+
+    def cleanup_inactive_clients(self):
+        """Remove inactive Termux clients"""
+        cutoff_time = datetime.now() - timedelta(hours=2)
+        inactive_clients = [
+            client_id for client_id, client in self.termux_clients.items()
+            if client.last_activity < cutoff_time
+        ]
+
+        for client_id in inactive_clients:
+            del self.termux_clients[client_id]
+            logger.info(f"Removed inactive client: {client_id}")
+
+        self.system_stats["active_clients"] = len(self.termux_clients)
+
+    def register_service(self, service_data: Dict[str, Any]) -> str:
+        """Register a new service in the ecosystem"""
+        service_id = str(uuid.uuid4())
+
+        service = ServiceInfo(
+            service_id=service_id,
+            service_name=service_data.get("name", "unknown"),
+            service_url=service_data.get("url", ""),
+            service_type=service_data.get("type", "unknown"),
+            metadata=service_data.get("metadata", {})
+        )
+
+        self.services[service_id] = service
+        logger.info(f"Registered service: {service.service_name} ({service_id})")
+
+        return service_id
+
+    def register_termux_client(self, client_id: str, metadata: Dict = None) -> str:
+        """Register a Termux client"""
+        session_id = f"termux_{client_id}_{int(time.time())}"
+
+        client = TermuxClient(
+            client_id=client_id,
+            session_id=session_id,
+            registration_time=datetime.now(),
+            last_activity=datetime.now(),
+            device_info=metadata or {}
+        )
+
+        self.termux_clients[session_id] = client
+        logger.info(f"Registered Termux client: {client_id} -> {session_id}")
+
+        return session_id
+
+    def proxy_request(self, service_type: str, endpoint: str, method: str = "GET", 
+                     data: Dict = None) -> Dict[str, Any]:
+        """Proxy requests to appropriate services with load balancing"""
+
+        # Find available services of the requested type
+        available_services = [
+            service for service in self.services.values()
+            if service.service_type == service_type and service.status == "active"
+        ]
+
+        if not available_services:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"No active {service_type} services available"
+            )
+
+        # Simple load balancing - choose service with lowest request count
+        target_service = min(available_services, key=lambda s: s.total_requests)
+
+        try:
+            url = f"{target_service.service_url}{endpoint}"
+
+            # Make the request
+            if method == "POST":
+                response = requests.post(url, json=data, timeout=30)
+            else:
+                response = requests.get(url, timeout=30)
+
+            # Update service stats
+            target_service.total_requests += 1
+            target_service.last_heartbeat = datetime.now()
+
+            # Update system stats
+            self.system_stats["total_requests"] += 1
+
+            # Track revenue if present in response
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, dict) and "revenue_generated" in result:
+                    revenue = result["revenue_generated"]
+                    self.system_stats["total_revenue"] += revenue
+                    self.revenue_history.append({
+                        "timestamp": datetime.now().isoformat(),
+                        "amount": revenue,
+                        "service": target_service.service_name
+                    })
+
+                return {"success": True, "data": result, "service_used": target_service.service_name}
+            else:
+                target_service.error_count += 1
+                self.system_stats["error_count"] += 1
+                return {"success": False, "error": f"Service error: {response.status_code}"}
+
+        except Exception as e:
+            target_service.error_count += 1
+            self.system_stats["error_count"] += 1
+            logger.error(f"Request proxy error: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    def update_client_activity(self, session_id: str, revenue_delta: float = 0.0):
+        """Update Termux client activity and revenue"""
+        if session_id in self.termux_clients:
+            client = self.termux_clients[session_id]
+            client.last_activity = datetime.now()
+            client.requests_made += 1
+            client.revenue_generated += revenue_delta
+
+    def get_system_overview(self) -> Dict[str, Any]:
+        """Get comprehensive system overview"""
+        uptime = datetime.now() - self.system_stats["start_time"]
+
+        # Service status summary
+        service_summary = defaultdict(int)
+        for service in self.services.values():
+            service_summary[service.status] += 1
+
+        # Recent revenue trend
+        recent_revenue = sum(
+            entry["amount"] for entry in list(self.revenue_history)[-10:]
+        ) if self.revenue_history else 0.0
+
+        return {
+            "system_info": {
+                "uptime": str(uptime),
+                "total_requests": self.system_stats["total_requests"],
+                "total_revenue": round(self.system_stats["total_revenue"], 2),
+                "recent_revenue": round(recent_revenue, 2),
+                "error_rate": round(self.system_stats["error_count"] / max(self.system_stats["total_requests"], 1) * 100, 2)
+            },
+            "services": {
+                "total": len(self.services),
+                "active": service_summary.get("active", 0),
+                "inactive": service_summary.get("inactive", 0),
+                "error": service_summary.get("error", 0),
+                "avg_response_time": round(self.system_stats["avg_response_time"], 3)
+            },
+            "clients": {
+                "total_registered": len(self.termux_clients),
+                "active": len([c for c in self.termux_clients.values() if c.status == "active"])
+            },
+            "performance": {
+                "last_health_check": self.system_stats["last_health_check"].isoformat() if self.system_stats["last_health_check"] else None,
+                "requests_per_minute": len([r for r in self.request_history if datetime.fromisoformat(r["timestamp"]) > datetime.now() - timedelta(minutes=1)]) if self.request_history else 0
+            }
+        }
+
+# Initialize the orchestrator
+orchestrator = OASISOrchestrator()
+
+# FastAPI app
+app = FastAPI(title="OASIS v3 Orchestrator", version="3.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+async def root():
+    """Orchestrator root endpoint"""
+    return {
+        "name": "OASIS v3 Orchestrator",
+        "version": "3.0.0",
+        "status": "operational",
+        "services_registered": len(orchestrator.services),
+        "clients_connected": len(orchestrator.termux_clients)
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.post("/register/service")
+async def register_service(service_data: dict):
+    """Register a new service"""
+    try:
+        service_id = orchestrator.register_service(service_data)
+        return {"success": True, "service_id": service_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/register/client")
+async def register_client(client_data: dict):
+    """Register a Termux client"""
+    try:
+        client_id = client_data.get("client_id")
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required")
+
+        session_id = orchestrator.register_termux_client(
+            client_id, 
+            client_data.get("metadata", {})
+        )
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "orchestrator_endpoints": {
+                "sentiment": "/proxy/sentiment",
+                "generate": "/proxy/generate", 
+                "content": "/proxy/content",
+                "stats": "/system/overview"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/proxy/sentiment")
+async def proxy_sentiment(data: dict, session_id: str = None):
+    """Proxy sentiment analysis requests"""
+    result = orchestrator.proxy_request("api-processor", "/api/v3/sentiment", "POST", data)
+
+    if session_id:
+        revenue = result.get("data", {}).get("revenue_generated", 0.0) if result["success"] else 0.0
+        orchestrator.update_client_activity(session_id, revenue)
+
+    return result
+
+@app.post("/proxy/generate") 
+async def proxy_generate(data: dict, session_id: str = None):
+    """Proxy text generation requests"""
+    result = orchestrator.proxy_request("api-processor", "/api/v3/generate", "POST", data)
+
+    if session_id:
+        revenue = result.get("data", {}).get("revenue_generated", 0.0) if result["success"] else 0.0
+        orchestrator.update_client_activity(session_id, revenue)
+
+    return result
+
+@app.post("/proxy/content")
+async def proxy_content(data: dict, session_id: str = None):
+    """Proxy content generation requests"""
+    result = orchestrator.proxy_request("api-processor", "/api/v3/content", "POST", data)
+
+    if session_id:
+        revenue = result.get("data", {}).get("revenue_generated", 0.0) if result["success"] else 0.0
+        orchestrator.update_client_activity(session_id, revenue)
+
+    return result
+
+@app.get("/system/overview")
+async def system_overview():
+    """Get comprehensive system overview"""
+    return orchestrator.get_system_overview()
+
+@app.get("/system/services")
+async def list_services():
+    """List all registered services"""
+    return {
+        "services": [
+            {
+                "id": service.service_id,
+                "name": service.service_name,
+                "type": service.service_type,
+                "status": service.status,
+                "url": service.service_url,
+                "requests": service.total_requests,
+                "errors": service.error_count,
+                "response_time": service.response_time,
+                "last_heartbeat": service.last_heartbeat.isoformat()
+            }
+            for service in orchestrator.services.values()
+        ]
+    }
+
+@app.get("/system/clients")
+async def list_clients():
+    """List all connected Termux clients"""
+    return {
+        "clients": [
+            {
+                "session_id": client.session_id,
+                "client_id": client.client_id,
+                "status": client.status,
+                "requests_made": client.requests_made,
+                "revenue_generated": round(client.revenue_generated, 2),
+                "registration_time": client.registration_time.isoformat(),
+                "last_activity": client.last_activity.isoformat()
+            }
+            for client in orchestrator.termux_clients.values()
+        ]
+    }
+
+# Gradio Interface for Orchestrator Dashboard
+def create_orchestrator_dashboard():
+    """Create orchestrator monitoring dashboard"""
+
+    css = """
+    .gradio-container {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        font-family: 'Arial', sans-serif;
+        color: white;
+    }
+    .gr-button {
+        background: linear-gradient(45deg, #4CAF50, #45a049);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-weight: bold;
+    }
+    .dashboard-header {
+        text-align: center;
+        padding: 30px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 15px;
+        margin: 20px;
+        backdrop-filter: blur(10px);
+    }
+    .metric-card {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    """
+
+    with gr.Blocks(css=css, title="ðŸŽ¯ OASIS v3 Orchestrator Dashboard") as dashboard:
+
+        gr.HTML("""
+        <div class="dashboard-header">
+            <h1>ðŸŽ¯ OASIS v3 Orchestrator</h1>
+            <h2>Central Command Center</h2>
+            <p>Monitoring and managing the entire OASIS ecosystem in real-time</p>
+        </div>
+        """)
+
+        with gr.Tabs():
+
+            # System Overview Tab
+            with gr.Tab("ðŸ“Š System Overview"):
+
+                with gr.Row():
+                    with gr.Column():
+                        system_overview = gr.JSON(
+                            label="ðŸ—ï¸ System Overview",
+                            elem_classes="metric-card"
+                        )
+
+                        refresh_overview_btn = gr.Button(
+                            "ðŸ”„ Refresh Overview",
+                            variant="primary"
+                        )
+
+                    with gr.Column():
+                        service_list = gr.JSON(
+                            label="âš™ï¸ Registered Services",
+                            elem_classes="metric-card"
+                        )
+
+                        refresh_services_btn = gr.Button(
+                            "ðŸ”„ Refresh Services",
+                            variant="secondary"
+                        )
+
+                def get_system_overview():
+                    return orchestrator.get_system_overview()
+
+                def get_service_list():
+                    services_data = []
+                    for service in orchestrator.services.values():
+                        services_data.append({
+                            "name": service.service_name,
+                            "type": service.service_type,
+                            "status": service.status,
+                            "requests": service.total_requests,
+                            "errors": service.error_count,
+                            "response_time": f"{service.response_time:.3f}s"
+                        })
+                    return {"services": services_data}
+
+                refresh_overview_btn.click(
+                    get_system_overview,
+                    outputs=system_overview
+                )
+
+                refresh_services_btn.click(
+                    get_service_list,
+                    outputs=service_list
+                )
+
+            # Client Management Tab  
+            with gr.Tab("ðŸ‘¥ Client Management"):
+
+                with gr.Row():
+                    with gr.Column():
+                        client_list = gr.JSON(
+                            label="ðŸ“± Connected Termux Clients",
+                            elem_classes="metric-card"
+                        )
+
+                        refresh_clients_btn = gr.Button(
+                            "ðŸ”„ Refresh Clients",
+                            variant="primary"
+                        )
+
+                    with gr.Column():
+                        client_stats = gr.JSON(
+                            label="ðŸ“ˆ Client Statistics",
+                            elem_classes="metric-card"
+                        )
+
+                def get_client_list():
+                    clients_data = []
+                    total_revenue = 0.0
+
+                    for client in orchestrator.termux_clients.values():
+                        clients_data.append({
+                            "client_id": client.client_id,
+                            "session_id": client.session_id,
+                            "status": client.status,
+                            "requests": client.requests_made,
+                            "revenue": f"${client.revenue_generated:.2f}",
+                            "last_activity": client.last_activity.strftime("%H:%M:%S")
+                        })
+                        total_revenue += client.revenue_generated
+
+                    return {
+                        "clients": clients_data,
+                        "summary": {
+                            "total_clients": len(clients_data),
+                            "total_revenue": f"${total_revenue:.2f}",
+                            "active_clients": len([c for c in orchestrator.termux_clients.values() if c.status == "active"])
+                        }
+                    }
+
+                refresh_clients_btn.click(
+                    get_client_list,
+                    outputs=[client_list, client_stats]
+                )
+
+            # Revenue Analytics Tab
+            with gr.Tab("ðŸ’° Revenue Analytics"):
+
+                gr.HTML("""
+                <div class="metric-card">
+                    <h3>ðŸ’° Revenue Tracking & Analytics</h3>
+                    <p>Real-time revenue monitoring across the OASIS ecosystem</p>
+                </div>
+                """)
+
+                with gr.Row():
+                    with gr.Column():
+                        revenue_overview = gr.JSON(
+                            label="ðŸ’µ Revenue Overview"
+                        )
+
+                    with gr.Column():
+                        revenue_breakdown = gr.JSON(
+                            label="ðŸ“Š Revenue Breakdown"
+                        )
+
+                refresh_revenue_btn = gr.Button(
+                    "ðŸ”„ Refresh Revenue Data",
+                    variant="primary"
+                )
+
+                def get_revenue_analytics():
+                    overview = orchestrator.get_system_overview()
+
+                    # Calculate revenue by service type
+                    service_revenue = defaultdict(float)
+                    for entry in orchestrator.revenue_history:
+                        service_revenue[entry["service"]] += entry["amount"]
+
+                    return overview["system_info"], dict(service_revenue)
+
+                refresh_revenue_btn.click(
+                    get_revenue_analytics,
+                    outputs=[revenue_overview, revenue_breakdown]
+                )
+
+        # Auto-refresh every 30 seconds
+        dashboard.load(get_system_overview, outputs=system_overview, every=30)
+
+        gr.HTML("""
+        <div class="dashboard-header">
+            <h3>ðŸš€ OASIS v3 Orchestrator - Enterprise Command Center</h3>
+            <p>Powering the next generation of AI ecosystems</p>
+        </div>
+        """)
+
+    return dashboard
+
+# Create and launch the dashboard
+if __name__ == "__main__":
+    dashboard = create_orchestrator_dashboard()
+
+    # Launch Gradio dashboard
+    dashboard.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=True,
+        show_api=False,
+        show_error=True
+    )"

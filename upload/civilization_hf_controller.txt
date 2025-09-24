@@ -1,0 +1,339 @@
+"#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Ultra-Lightweight Hugging Face Controller
+Zero Dependencies â€¢ Pure API â€¢ Maximum Revenue
+
+This is the heart of The New Civilization - managing all AI operations
+through Hugging Face APIs without any heavy local dependencies.
+"""
+
+import os
+import json
+import time
+import logging
+from datetime import datetime
+from urllib.request import urlopen, Request
+from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+
+class NewCivilizationHF:
+    """Ultra-lightweight Hugging Face API controller"""
+
+    def __init__(self, token=None):
+        # Load configuration
+        self.config = self._load_config()
+        self.hf_token = token or self.config.get('HF_TOKEN', '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')
+        self.api_base = self.config.get('HF_API_BASE', 'https://api-inference.huggingface.co/models')
+
+        # Revenue tracking
+        self.revenue_target = float(self.config.get('REVENUE_TARGET_MONTHLY', 1500))
+        self.pricing = {
+            'content_min': float(self.config.get('PRICING_CONTENT_MIN', 50)),
+            'content_max': float(self.config.get('PRICING_CONTENT_MAX', 200)),
+            'api_per_request': float(self.config.get('PRICING_API_PER_REQUEST', 0.05))
+        }
+
+        # Available models (API-only, no local processing)
+        self.models = {
+            'text_generation': 'microsoft/DialoGPT-medium',
+            'text_classification': 'cardiffnlp/twitter-roberta-base-sentiment-latest',
+            'summarization': 'facebook/bart-large-cnn', 
+            'translation_en_id': 'Helsinki-NLP/opus-mt-en-id',
+            'translation_id_en': 'Helsinki-NLP/opus-mt-id-en',
+            'question_answering': 'deepset/roberta-base-squad2',
+            'text2image': 'runwayml/stable-diffusion-v1-5'
+        }
+
+        # Setup logging
+        self._setup_logging()
+        self.logger.info("ðŸš€ The New Civilization HF Controller initialized")
+        self.logger.info(f"ðŸ’° Revenue target: ${self.revenue_target}/month")
+
+    def _load_config(self):
+        """Load configuration from .env file"""
+        config = {}
+        try:
+            config_path = os.path.expanduser('~/the_new_civilization/config/.env')
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    for line in f:
+                        if '=' in line and not line.strip().startswith('#'):
+                            key, value = line.strip().split('=', 1)
+                            config[key] = value
+        except Exception as e:
+            print(f"âš ï¸  Config loading failed: {e}")
+        return config
+
+    def _setup_logging(self):
+        """Setup ultra-lightweight logging"""
+        log_dir = os.path.expanduser('~/the_new_civilization/logs')
+        os.makedirs(log_dir, exist_ok=True)
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(f'{log_dir}/civilization.log'),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+
+    def _make_api_request(self, model_name, payload, timeout=60):
+        """Make API request to Hugging Face"""
+        url = f"{self.api_base}/{model_name}"
+        headers = {
+            'Authorization': f'Bearer {self.hf_token}',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            request = Request(url, data=data, headers=headers)
+
+            with urlopen(request, timeout=timeout) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return {'success': True, 'data': result}
+
+        except HTTPError as e:
+            error_msg = f"HTTP Error {e.code}: {e.reason}"
+            self.logger.error(f"API request failed: {error_msg}")
+            return {'success': False, 'error': error_msg}
+        except URLError as e:
+            error_msg = f"URL Error: {e.reason}"
+            self.logger.error(f"API request failed: {error_msg}")
+            return {'success': False, 'error': error_msg}
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)}"
+            self.logger.error(f"API request failed: {error_msg}")
+            return {'success': False, 'error': error_msg}
+
+    def generate_text(self, prompt, max_length=100):
+        """Generate text using Hugging Face API - Revenue Service"""
+        self.logger.info(f"ðŸ§  Text generation request: {prompt[:50]}...")
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_length": max_length,
+                "temperature": 0.7,
+                "do_sample": True
+            }
+        }
+
+        result = self._make_api_request(self.models['text_generation'], payload)
+
+        if result['success']:
+            generated_text = result['data'][0]['generated_text']
+            self.logger.info("âœ… Text generation successful")
+            self._log_revenue_activity('text_generation', 0.05)
+            return generated_text
+        else:
+            self.logger.error(f"âŒ Text generation failed: {result['error']}")
+            return None
+
+    def analyze_sentiment(self, text):
+        """Analyze sentiment - Revenue Service"""
+        self.logger.info(f"ðŸŽ­ Sentiment analysis request: {text[:50]}...")
+
+        payload = {"inputs": text}
+        result = self._make_api_request(self.models['text_classification'], payload)
+
+        if result['success']:
+            sentiment = result['data'][0]
+            self.logger.info(f"âœ… Sentiment: {sentiment['label']} ({sentiment['score']:.3f})")
+            self._log_revenue_activity('sentiment_analysis', 0.03)
+            return sentiment
+        else:
+            self.logger.error(f"âŒ Sentiment analysis failed: {result['error']}")
+            return None
+
+    def summarize_text(self, text, max_length=50):
+        """Summarize text - Revenue Service"""
+        self.logger.info(f"ðŸ“ Summarization request: {text[:50]}...")
+
+        payload = {
+            "inputs": text,
+            "parameters": {
+                "max_length": max_length,
+                "min_length": 10
+            }
+        }
+
+        result = self._make_api_request(self.models['summarization'], payload)
+
+        if result['success']:
+            summary = result['data'][0]['summary_text']
+            self.logger.info("âœ… Summarization successful")
+            self._log_revenue_activity('summarization', 0.08)
+            return summary
+        else:
+            self.logger.error(f"âŒ Summarization failed: {result['error']}")
+            return None
+
+    def translate_text(self, text, direction='en_to_id'):
+        """Translate text - Revenue Service"""
+        model_key = f'translation_{direction.replace("_to_", "_")}'
+        if model_key not in self.models:
+            self.logger.error(f"âŒ Translation direction {direction} not supported")
+            return None
+
+        self.logger.info(f"ðŸŒ Translation request ({direction}): {text[:50]}...")
+
+        payload = {"inputs": text}
+        result = self._make_api_request(self.models[model_key], payload)
+
+        if result['success']:
+            translation = result['data'][0]['translation_text']
+            self.logger.info("âœ… Translation successful")
+            self._log_revenue_activity('translation', 0.06)
+            return translation
+        else:
+            self.logger.error(f"âŒ Translation failed: {result['error']}")
+            return None
+
+    def _log_revenue_activity(self, service_type, amount):
+        """Log revenue-generating activity"""
+        activity = {
+            'timestamp': datetime.now().isoformat(),
+            'service': service_type,
+            'revenue': amount,
+            'cumulative': self._get_daily_revenue() + amount
+        }
+
+        # Save to business logs
+        business_log = os.path.expanduser('~/the_new_civilization/business/revenue_log.json')
+        os.makedirs(os.path.dirname(business_log), exist_ok=True)
+
+        try:
+            if os.path.exists(business_log):
+                with open(business_log, 'r') as f:
+                    logs = json.load(f)
+            else:
+                logs = []
+
+            logs.append(activity)
+
+            with open(business_log, 'w') as f:
+                json.dump(logs, f, indent=2)
+
+            self.logger.info(f"ðŸ’° Revenue logged: ${amount:.2f} from {service_type}")
+        except Exception as e:
+            self.logger.error(f"Revenue logging failed: {e}")
+
+    def _get_daily_revenue(self):
+        """Get today's revenue total"""
+        business_log = os.path.expanduser('~/the_new_civilization/business/revenue_log.json')
+        if not os.path.exists(business_log):
+            return 0.0
+
+        try:
+            with open(business_log, 'r') as f:
+                logs = json.load(f)
+
+            today = datetime.now().date().isoformat()
+            daily_total = sum(
+                log['revenue'] for log in logs 
+                if log['timestamp'].startswith(today)
+            )
+            return daily_total
+        except:
+            return 0.0
+
+    def get_revenue_stats(self):
+        """Get comprehensive revenue statistics"""
+        business_log = os.path.expanduser('~/the_new_civilization/business/revenue_log.json')
+        if not os.path.exists(business_log):
+            return {'daily': 0, 'monthly': 0, 'total': 0}
+
+        try:
+            with open(business_log, 'r') as f:
+                logs = json.load(f)
+
+            today = datetime.now().date().isoformat()
+            this_month = datetime.now().strftime('%Y-%m')
+
+            daily = sum(log['revenue'] for log in logs if log['timestamp'].startswith(today))
+            monthly = sum(log['revenue'] for log in logs if log['timestamp'].startswith(this_month))
+            total = sum(log['revenue'] for log in logs)
+
+            return {
+                'daily': daily,
+                'monthly': monthly, 
+                'total': total,
+                'target_progress': (monthly / self.revenue_target) * 100
+            }
+        except:
+            return {'daily': 0, 'monthly': 0, 'total': 0, 'target_progress': 0}
+
+    def run_interactive_demo(self):
+        """Interactive demo of all capabilities"""
+        print("\n" + "="*60)
+        print("ðŸŒŸ THE NEW CIVILIZATION - AI SERVICES DEMO")
+        print("ðŸ’° Revenue-Generating AI Services via Hugging Face API")
+        print("="*60)
+
+        while True:
+            print("\nðŸŽ¯ Available Services:")
+            print("1. ðŸ§  Text Generation ($0.05)")
+            print("2. ðŸŽ­ Sentiment Analysis ($0.03)")
+            print("3. ðŸ“ Text Summarization ($0.08)")
+            print("4. ðŸŒ Translation ($0.06)")
+            print("5. ðŸ’° Revenue Statistics")
+            print("6. ðŸšª Exit")
+
+            try:
+                choice = input("\nðŸš€ Select service (1-6): ").strip()
+
+                if choice == '1':
+                    prompt = input("Enter text to generate from: ")
+                    result = self.generate_text(prompt)
+                    if result:
+                        print(f"\nâœ¨ Generated: {result}")
+
+                elif choice == '2':
+                    text = input("Enter text to analyze: ")
+                    result = self.analyze_sentiment(text)
+                    if result:
+                        print(f"\nðŸŽ­ Sentiment: {result['label']} (confidence: {result['score']:.3f})")
+
+                elif choice == '3':
+                    text = input("Enter text to summarize: ")
+                    result = self.summarize_text(text)
+                    if result:
+                        print(f"\nðŸ“ Summary: {result}")
+
+                elif choice == '4':
+                    text = input("Enter text to translate: ")
+                    direction = input("Direction (en_to_id/id_to_en): ").strip()
+                    result = self.translate_text(text, direction)
+                    if result:
+                        print(f"\nðŸŒ Translation: {result}")
+
+                elif choice == '5':
+                    stats = self.get_revenue_stats()
+                    print(f"\nðŸ’° Revenue Statistics:")
+                    print(f"   ðŸ“… Daily: ${stats['daily']:.2f}")
+                    print(f"   ðŸ“Š Monthly: ${stats['monthly']:.2f}")
+                    print(f"   ðŸŽ¯ Target Progress: {stats.get('target_progress', 0):.1f}%")
+                    print(f"   ðŸ’Ž Total: ${stats['total']:.2f}")
+
+                elif choice == '6':
+                    print("\nðŸš€ Thank you for using The New Civilization!")
+                    break
+
+                else:
+                    print("âŒ Invalid choice. Please try again.")
+
+            except KeyboardInterrupt:
+                print("\n\nðŸšª Exiting The New Civilization...")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {e}")
+
+if __name__ == "__main__":
+    # Initialize The New Civilization
+    civilization = NewCivilizationHF()
+
+    # Run interactive demo
+    civilization.run_interactive_demo()"

@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Simple Business Engine
+Ultra-lightweight revenue tracking and client management
+"""
+
+import os
+import sys
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+class SimpleBusinessEngine:
+    """Ultra-lightweight business automation engine"""
+    
+    def __init__(self):
+        self.business_dir = Path(__file__).parent.parent / "business"
+        self.business_dir.mkdir(exist_ok=True)
+        
+        self.clients_file = self.business_dir / "clients.json"
+        self.revenue_file = self.business_dir / "revenue.json"
+        
+        self.clients = self._load_json(self.clients_file, {})
+        self.revenue_log = self._load_json(self.revenue_file, [])
+        
+        print("💼 Simple Business Engine initialized")
+    
+    def _load_json(self, file_path, default):
+        """Load JSON file with fallback"""
+        try:
+            if file_path.exists():
+                with open(file_path, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return default
+    
+    def _save_json(self, file_path, data):
+        """Save data to JSON file"""
+        try:
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"❌ Error saving {file_path}: {e}")
+    
+    def add_client(self, name: str, email: str, service_tier: str = "basic"):
+        """Add new client"""
+        client_id = str(uuid.uuid4())[:8]
+        
+        client = {
+            "id": client_id,
+            "name": name,
+            "email": email,
+            "service_tier": service_tier,
+            "created_at": datetime.now().isoformat(),
+            "total_spent": 0.0,
+            "requests_count": 0
+        }
+        
+        self.clients[client_id] = client
+        self._save_json(self.clients_file, self.clients)
+        
+        print(f"✅ Client added: {name} ({client_id})")
+        return client_id
+    
+    def record_transaction(self, client_id: str, service: str, amount: float):
+        """Record revenue transaction"""
+        transaction = {
+            "id": str(uuid.uuid4())[:8],
+            "client_id": client_id,
+            "service": service,
+            "amount": amount,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        self.revenue_log.append(transaction)
+        
+        # Update client stats
+        if client_id in self.clients:
+            self.clients[client_id]["total_spent"] += amount
+            self.clients[client_id]["requests_count"] += 1
+        
+        self._save_json(self.revenue_file, self.revenue_log)
+        self._save_json(self.clients_file, self.clients)
+        
+        print(f"💰 Transaction recorded: ${amount:.2f} for {service}")
+    
+    def get_revenue_summary(self):
+        """Get revenue summary"""
+        total_revenue = sum(t["amount"] for t in self.revenue_log)
+        total_clients = len(self.clients)
+        total_transactions = len(self.revenue_log)
+        
+        # Calculate monthly revenue
+        current_month = datetime.now().strftime("%Y-%m")
+        monthly_revenue = sum(
+            t["amount"] for t in self.revenue_log 
+            if t["timestamp"].startswith(current_month)
+        )
+        
+        return {
+            "total_revenue": total_revenue,
+            "monthly_revenue": monthly_revenue,
+            "total_clients": total_clients,
+            "total_transactions": total_transactions
+        }
+    
+    def display_dashboard(self):
+        """Display business dashboard"""
+        summary = self.get_revenue_summary()
+        
+        print("\n" + "="*50)
+        print("💼 OASIS 2.0 BUSINESS DASHBOARD")
+        print("="*50)
+        print(f"💰 Total Revenue: ${summary['total_revenue']:.2f}")
+        print(f"📅 Monthly Revenue: ${summary['monthly_revenue']:.2f}")
+        print(f"👥 Total Clients: {summary['total_clients']}")
+        print(f"📊 Total Transactions: {summary['total_transactions']}")
+        print("="*50)
+        
+        # Top clients
+        if self.clients:
+            print("\n🏆 TOP CLIENTS:")
+            sorted_clients = sorted(
+                self.clients.values(), 
+                key=lambda x: x["total_spent"], 
+                reverse=True
+            )
+            
+            for i, client in enumerate(sorted_clients[:5], 1):
+                print(f"{i}. {client['name']} - ${client['total_spent']:.2f}")
+        
+        print("\n")
+    
+    def list_clients(self):
+        """List all clients"""
+        if not self.clients:
+            print("📝 No clients found")
+            return
+        
+        print("\n👥 CLIENT LIST:")
+        print("-" * 40)
+        for client in self.clients.values():
+            print(f"ID: {client['id']}")
+            print(f"Name: {client['name']}")
+            print(f"Email: {client['email']}")
+            print(f"Tier: {client['service_tier']}")
+            print(f"Spent: ${client['total_spent']:.2f}")
+            print(f"Requests: {client['requests_count']}")
+            print("-" * 40)
+    
+    def interactive_mode(self):
+        """Interactive business management"""
+        print("\n💼 BUSINESS ENGINE INTERACTIVE MODE")
+        print("="*40)
+        print("Available commands:")
+        print("• 'dashboard' - Show business dashboard")
+        print("• 'clients' - List all clients")
+        print("• 'add' - Add new client")
+        print("• 'transaction' - Record transaction")
+        print("• 'quit' - Exit")
+        print("="*40 + "\n")
+        
+        while True:
+            try:
+                command = input("💼 Enter command: ").strip().lower()
+                
+                if command == "quit":
+                    print("👋 Goodbye!")
+                    break
+                
+                elif command == "dashboard":
+                    self.display_dashboard()
+                
+                elif command == "clients":
+                    self.list_clients()
+                
+                elif command == "add":
+                    name = input("Enter client name: ").strip()
+                    email = input("Enter client email: ").strip()
+                    tier = input("Enter service tier (basic/premium): ").strip() or "basic"
+                    
+                    if name and email:
+                        self.add_client(name, email, tier)
+                    else:
+                        print("❌ Name and email are required")
+                
+                elif command == "transaction":
+                    self.list_clients()
+                    client_id = input("Enter client ID: ").strip()
+                    service = input("Enter service name: ").strip()
+                    
+                    try:
+                        amount = float(input("Enter amount: $"))
+                        if client_id in self.clients and service and amount > 0:
+                            self.record_transaction(client_id, service, amount)
+                        else:
+                            print("❌ Invalid input")
+                    except ValueError:
+                        print("❌ Invalid amount")
+                
+                else:
+                    print("❓ Unknown command. Type 'quit' to exit.")
+            
+            except KeyboardInterrupt:
+                print("\n👋 Interrupted by user. Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+
+def main():
+    """Main entry point"""
+    print("💼 OASIS 2.0 - SIMPLE BUSINESS ENGINE")
+    print("Ultra-lightweight revenue tracking")
+    print("-" * 40)
+    
+    engine = SimpleBusinessEngine()
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
+        engine.interactive_mode()
+    else:
+        # Demo mode
+        print("\n🎬 DEMO MODE")
+        engine.display_dashboard()
+        
+        print("💼 Run with --interactive flag for interactive mode")
+
+if __name__ == "__main__":
+    main()

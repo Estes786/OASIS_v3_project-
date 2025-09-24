@@ -1,0 +1,19 @@
+# OASIS 2.0 - Ultra-Lightweight Dependencies
+# Revolutionary AI Platform with Minimal Footprint
+
+# Core web framework - lightweight and fast
+gradio==4.44.0
+
+# HTTP client for API calls - essential for Hugging Face integration
+requests==2.31.0
+
+# JSON handling and data manipulation - minimal and essential
+python-dateutil==2.8.2
+
+# Optional: For enhanced logging and monitoring
+python-dotenv==1.0.0
+
+# Note: This is intentionally minimal!
+# NO numpy, torch, pytorch, pandas, scikit-learn, transformers
+# All AI processing happens via Hugging Face API calls
+# Total installation size: < 50MB (vs typical 2GB+ ML environments)

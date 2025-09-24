@@ -1,0 +1,151 @@
+"#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Master Launcher
+One-click launch for the entire ecosystem
+"""
+
+import os
+import sys
+import json
+import time
+from pathlib import Path
+
+class CivilizationLauncher:
+    """Master launcher for The New Civilization ecosystem"""
+
+    def __init__(self):
+        self.base_dir = Path.home() / "the_new_civilization"
+        self.scripts_dir = self.base_dir / "scripts"
+
+        print("ðŸŒŸ THE NEW CIVILIZATION - MASTER LAUNCHER")
+        print("=" * 50)
+        print("ðŸš€ Zero Dependencies â€¢ Maximum Revenue â€¢ Ultra-Lightweight")
+        print("=" * 50)
+
+    def check_installation(self):
+        """Check if system is properly installed"""
+        required_files = [
+            'config/.env',
+            'scripts/civilization_hf_controller.py',
+            'scripts/civilization_business_engine.py', 
+            'scripts/oasis_orchestrator.py'
+        ]
+
+        missing_files = []
+        for file_path in required_files:
+            if not (self.base_dir / file_path).exists():
+                missing_files.append(file_path)
+
+        if missing_files:
+            print("âŒ Installation incomplete. Missing files:")
+            for file in missing_files:
+                print(f"   - {file}")
+            print("\nðŸ”§ Please run the setup script first:")
+            print("   ./new_civilization_setup.sh")
+            return False
+
+        print("âœ… Installation check passed")
+        return True
+
+    def show_main_menu(self):
+        """Display main menu"""
+        print("\nðŸŽ¯ MAIN MENU:")
+        print("1. ðŸš€ Launch OASIS 2.0 Orchestrator")
+        print("2. ðŸ§  Launch HF Controller (AI Services)")
+        print("3. ðŸ’¼ Launch Business Engine")
+        print("4. ðŸ“Š System Status Check")
+        print("5. ðŸ”§ Configuration Manager")
+        print("6. ðŸ“‹ View Documentation")
+        print("7. ðŸšª Exit")
+
+    def launch_component(self, component):
+        """Launch specific component"""
+        component_files = {
+            'orchestrator': 'oasis_orchestrator.py',
+            'hf_controller': 'civilization_hf_controller.py',
+            'business': 'civilization_business_engine.py'
+        }
+
+        if component not in component_files:
+            print(f"âŒ Unknown component: {component}")
+            return
+
+        script_path = self.scripts_dir / component_files[component]
+
+        if not script_path.exists():
+            print(f"âŒ Component file not found: {script_path}")
+            return
+
+        print(f"ðŸš€ Launching {component.title()}...")
+        os.system(f"cd {self.base_dir} && python scripts/{component_files[component]}")
+
+    def show_system_status(self):
+        """Show quick system status"""
+        print("\nðŸ“Š SYSTEM STATUS:")
+
+        # Check configuration
+        config_file = self.base_dir / "config/.env"
+        if config_file.exists():
+            print("âœ… Configuration: Ready")
+        else:
+            print("âŒ Configuration: Missing")
+
+        # Check components
+        components = {
+            'HF Controller': 'scripts/civilization_hf_controller.py',
+            'Business Engine': 'scripts/civilization_business_engine.py',
+            'OASIS Orchestrator': 'scripts/oasis_orchestrator.py'
+        }
+
+        for name, path in components.items():
+            if (self.base_dir / path).exists():
+                print(f"âœ… {name}: Ready")
+            else:
+                print(f"âŒ {name}: Missing")
+
+        # Check logs
+        log_dir = self.base_dir / "logs"
+        if log_dir.exists():
+            log_files = list(log_dir.glob("*.log"))
+            print(f"ðŸ“‹ Log Files: {len(log_files)} found")
+        else:
+            print("ðŸ“‹ Log Files: None")
+
+    def run(self):
+        """Main launcher loop"""
+        if not self.check_installation():
+            return
+
+        while True:
+            self.show_main_menu()
+
+            try:
+                choice = input("\nðŸŽ¯ Select option (1-7): ").strip()
+
+                if choice == '1':
+                    self.launch_component('orchestrator')
+                elif choice == '2':
+                    self.launch_component('hf_controller') 
+                elif choice == '3':
+                    self.launch_component('business')
+                elif choice == '4':
+                    self.show_system_status()
+                elif choice == '5':
+                    print("ðŸ”§ Configuration Manager coming soon!")
+                elif choice == '6':
+                    print("ðŸ“‹ Documentation available in deployment guide")
+                elif choice == '7':
+                    print("\nðŸš€ Thank you for using The New Civilization!")
+                    break
+                else:
+                    print("âŒ Invalid choice. Please try again.")
+
+            except KeyboardInterrupt:
+                print("\n\nðŸšª Exiting The New Civilization...")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {e}")
+
+if __name__ == "__main__":
+    launcher = CivilizationLauncher()
+    launcher.run()"

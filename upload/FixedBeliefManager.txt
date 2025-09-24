@@ -1,0 +1,445 @@
+""""
+FMAA Belief Manager Module - FIXED VERSION
+Enhanced with advanced monitoring, confidence scoring, dan quantum-inspired processing
+
+Author: FMAA Team
+Version: 2.0 (Fixed)
+"""
+
+import asyncio
+import json
+import time
+import logging
+import numpy as np
+from typing import Dict, Any, List, Optional, Tuple, Union
+from datetime import datetime, timedelta
+from dataclasses import dataclass, asdict, field
+from enum import Enum
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import psutil
+import uuid
+import weakref
+from collections import defaultdict, deque
+
+# Quantum-inspired imports (fallback if not available)
+try:
+    import pennylane as qml
+    QUANTUM_AVAILABLE = True
+    print("âœ… Quantum libraries loaded successfully")
+except ImportError:
+    QUANTUM_AVAILABLE = False
+    print("âš ï¸  Quantum libraries not available, using classical processing")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+class BeliefConfidence(Enum):
+    """Enum for belief confidence levels"""
+    VERY_LOW = 0.1
+    LOW = 0.3
+    MEDIUM = 0.5
+    HIGH = 0.7
+    VERY_HIGH = 0.9
+
+@dataclass
+class Belief:
+    """
+    Structured Belief dataclass with TTL support and metadata tracking
+    """
+    key: str
+    value: Any
+    confidence: float = 0.5
+    timestamp: datetime = field(default_factory=datetime.now)
+    source: str = "unknown"
+    ttl: Optional[int] = None  # Time to live in seconds
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def is_expired(self) -> bool:
+        """Check if belief has expired based on TTL"""
+        if self.ttl is None:
+            return False
+        return (datetime.now() - self.timestamp).total_seconds() > self.ttl
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert belief to dictionary"""
+        return asdict(self)
+
+class QuantumBeliefProcessor:
+    """
+    Quantum-inspired belief processing with classical fallback
+    """
+
+    def __init__(self):
+        self.quantum_available = QUANTUM_AVAILABLE
+        if self.quantum_available:
+            self.device = qml.device('default.qubit', wires=2)
+            self.circuit = qml.QNode(self._quantum_uncertainty_circuit, self.device)
+
+    def _quantum_uncertainty_circuit(self, belief_vector: np.ndarray) -> float:
+        """Quantum circuit for uncertainty calculation"""
+        if len(belief_vector) >= 2:
+            qml.RX(belief_vector[0], wires=0)
+            qml.RY(belief_vector[1], wires=1)
+            qml.CNOT(wires=[0, 1])
+        return qml.expval(qml.PauliZ(0))
+
+    def calculate_uncertainty(self, belief: Belief) -> float:
+        """Calculate uncertainty using quantum-inspired or classical method"""
+        try:
+            if self.quantum_available and isinstance(belief.value, (int, float, list, tuple)):
+                # Convert belief value to vector
+                if isinstance(belief.value, (int, float)):
+                    belief_vector = np.array([float(belief.value), belief.confidence])
+                else:
+                    belief_vector = np.array(belief.value[:2]) if len(belief.value) >= 2 else np.array([0.5, belief.confidence])
+
+                # Normalize
+                belief_vector = belief_vector / np.linalg.norm(belief_vector) if np.linalg.norm(belief_vector) > 0 else belief_vector
+
+                uncertainty = 1.0 - abs(self.circuit(belief_vector))
+                return max(0.0, min(1.0, uncertainty))
+            else:
+                # Classical fallback
+                return self._classical_uncertainty(belief)
+        except Exception as e:
+            logging.warning(f"Quantum uncertainty calculation failed: {e}, falling back to classical")
+            return self._classical_uncertainty(belief)
+
+    def _classical_uncertainty(self, belief: Belief) -> float:
+        """Classical uncertainty calculation"""
+        age_factor = (datetime.now() - belief.timestamp).total_seconds() / 3600  # hours
+        confidence_uncertainty = 1.0 - belief.confidence
+        age_uncertainty = min(age_factor * 0.1, 0.5)  # Max 50% uncertainty from age
+
+        total_uncertainty = min(confidence_uncertainty + age_uncertainty, 1.0)
+        return total_uncertainty
+
+class BeliefManager:
+    """
+    Enhanced Belief Manager with advanced monitoring, confidence scoring, and thread safety
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = config or {}
+        self.beliefs: Dict[str, Belief] = {}
+        self.belief_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
+
+        # Thread safety
+        self._lock = threading.RLock()
+        self._running = True
+
+        # Performance metrics
+        self.stats = {
+            'beliefs_created': 0,
+            'beliefs_updated': 0,
+            'beliefs_retrieved': 0,
+            'beliefs_expired': 0,
+            'error_count': 0,
+            'total_operations': 0,
+            'start_time': datetime.now()
+        }
+
+        # Advanced components
+        self.quantum_processor = QuantumBeliefProcessor()
+        self.executor = ThreadPoolExecutor(max_workers=self.config.get('max_workers', 4))
+
+        # Setup logging
+        self.logger = logging.getLogger(f"{__name__}.BeliefManager")
+        self.logger.setLevel(getattr(logging, self.config.get('log_level', 'INFO')))
+
+        # Background monitoring
+        self.monitoring_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
+        self.monitoring_thread.start()
+
+        self.logger.info("âœ… Belief Manager initialized successfully")
+
+    def _monitoring_loop(self):
+        """Background monitoring for expired beliefs and system health"""
+        while self._running:
+            try:
+                self._cleanup_expired_beliefs()
+                self._update_system_stats()
+                time.sleep(self.config.get('monitoring_interval', 30))
+            except Exception as e:
+                self.logger.error(f"Monitoring loop error: {e}")
+                self.stats['error_count'] += 1
+
+    def _cleanup_expired_beliefs(self):
+        """Remove expired beliefs"""
+        with self._lock:
+            expired_keys = []
+            for key, belief in self.beliefs.items():
+                if belief.is_expired():
+                    expired_keys.append(key)
+
+            for key in expired_keys:
+                del self.beliefs[key]
+                self.stats['beliefs_expired'] += 1
+
+            if expired_keys:
+                self.logger.info(f"ðŸ§¹ Cleaned up {len(expired_keys)} expired beliefs")
+
+    def _update_system_stats(self):
+        """Update system performance statistics"""
+        try:
+            process = psutil.Process()
+            self.stats.update({
+                'memory_usage_mb': process.memory_info().rss / 1024 / 1024,
+                'cpu_percent': process.cpu_percent(),
+                'thread_count': threading.active_count(),
+                'belief_count': len(self.beliefs),
+                'uptime_hours': (datetime.now() - self.stats['start_time']).total_seconds() / 3600
+            })
+        except Exception as e:
+            self.logger.error(f"Failed to update system stats: {e}")
+
+    def update_belief(self, key: str, value: Any, confidence: float = 0.5, 
+                     source: str = "unknown", ttl: Optional[int] = None,
+                     metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Update or create a belief with confidence scoring
+        """
+        try:
+            with self._lock:
+                # Store old belief for history
+                old_belief = self.beliefs.get(key)
+
+                # Create new belief
+                new_belief = Belief(
+                    key=key,
+                    value=value,
+                    confidence=max(0.0, min(1.0, confidence)),  # Clamp to [0,1]
+                    source=source,
+                    ttl=ttl,
+                    metadata=metadata or {}
+                )
+
+                # Add to history if belief existed
+                if old_belief:
+                    self.belief_history[key].append(old_belief.to_dict())
+                    self.stats['beliefs_updated'] += 1
+                else:
+                    self.stats['beliefs_created'] += 1
+
+                # Store belief
+                self.beliefs[key] = new_belief
+                self.stats['total_operations'] += 1
+
+                self.logger.debug(f"âœ… Updated belief '{key}' with confidence {confidence}")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to update belief '{key}': {e}")
+            self.stats['error_count'] += 1
+            return False
+
+    def get_belief(self, key: str, include_uncertainty: bool = False) -> Optional[Union[Belief, Tuple[Belief, float]]]:
+        """
+        Get belief by key with optional uncertainty calculation
+        """
+        try:
+            with self._lock:
+                belief = self.beliefs.get(key)
+                if belief is None:
+                    return None
+
+                # Check if expired
+                if belief.is_expired():
+                    del self.beliefs[key]
+                    self.stats['beliefs_expired'] += 1
+                    return None
+
+                self.stats['beliefs_retrieved'] += 1
+                self.stats['total_operations'] += 1
+
+                if include_uncertainty:
+                    uncertainty = self.quantum_processor.calculate_uncertainty(belief)
+                    return (belief, uncertainty)
+
+                return belief
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to get belief '{key}': {e}")
+            self.stats['error_count'] += 1
+            return None
+
+    def get_beliefs_by_confidence(self, min_confidence: float = 0.0, max_confidence: float = 1.0) -> List[Belief]:
+        """Get beliefs filtered by confidence range"""
+        try:
+            with self._lock:
+                filtered_beliefs = []
+                for belief in self.beliefs.values():
+                    if not belief.is_expired() and min_confidence <= belief.confidence <= max_confidence:
+                        filtered_beliefs.append(belief)
+
+                self.stats['total_operations'] += 1
+                return filtered_beliefs
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to filter beliefs by confidence: {e}")
+            self.stats['error_count'] += 1
+            return []
+
+    def get_belief_history(self, key: str) -> List[Dict[str, Any]]:
+        """Get historical versions of a belief"""
+        return list(self.belief_history.get(key, []))
+
+    def remove_belief(self, key: str) -> bool:
+        """Remove a belief"""
+        try:
+            with self._lock:
+                if key in self.beliefs:
+                    del self.beliefs[key]
+                    self.stats['total_operations'] += 1
+                    self.logger.debug(f"ðŸ—‘ï¸  Removed belief '{key}'")
+                    return True
+                return False
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to remove belief '{key}': {e}")
+            self.stats['error_count'] += 1
+            return False
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get comprehensive statistics"""
+        with self._lock:
+            return self.stats.copy()
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """Get system health status"""
+        stats = self.get_stats()
+
+        # Calculate health score (0-100)
+        error_rate = stats['error_count'] / max(stats['total_operations'], 1)
+        memory_score = max(0, 100 - min(stats.get('memory_usage_mb', 0) / 10, 100))
+        error_score = max(0, 100 - error_rate * 100)
+
+        health_score = (memory_score + error_score) / 2
+
+        status = "healthy" if health_score > 80 else "warning" if health_score > 60 else "critical"
+
+        return {
+            'status': status,
+            'health_score': round(health_score, 2),
+            'error_rate': round(error_rate * 100, 2),
+            'memory_usage_mb': stats.get('memory_usage_mb', 0),
+            'uptime_hours': stats.get('uptime_hours', 0),
+            'belief_count': stats.get('belief_count', 0)
+        }
+
+    def export_beliefs(self, include_expired: bool = False) -> Dict[str, Any]:
+        """Export all beliefs to dictionary"""
+        try:
+            with self._lock:
+                exported = {}
+                for key, belief in self.beliefs.items():
+                    if include_expired or not belief.is_expired():
+                        exported[key] = belief.to_dict()
+                return exported
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to export beliefs: {e}")
+            return {}
+
+    def import_beliefs(self, belief_data: Dict[str, Any]) -> int:
+        """Import beliefs from dictionary"""
+        imported_count = 0
+        try:
+            for key, data in belief_data.items():
+                if self.update_belief(
+                    key=key,
+                    value=data.get('value'),
+                    confidence=data.get('confidence', 0.5),
+                    source=data.get('source', 'import'),
+                    ttl=data.get('ttl'),
+                    metadata=data.get('metadata', {})
+                ):
+                    imported_count += 1
+
+            self.logger.info(f"ðŸ“¥ Imported {imported_count} beliefs")
+            return imported_count
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to import beliefs: {e}")
+            return imported_count
+
+    def shutdown(self):
+        """Graceful shutdown"""
+        self.logger.info("ðŸ”„ Initiating graceful shutdown...")
+        self._running = False
+
+        # Wait for monitoring thread
+        if self.monitoring_thread.is_alive():
+            self.monitoring_thread.join(timeout=5)
+
+        # Shutdown executor
+        self.executor.shutdown(wait=True, timeout=10)
+
+        self.logger.info("âœ… Belief Manager shutdown completed")
+
+# Example usage and testing functions
+def example_usage():
+    """Example usage of the Fixed Belief Manager"""
+    print("ðŸš€ Starting Belief Manager Example...")
+
+    # 1. Initialize Belief Manager
+    config = {
+        'max_workers': 4,
+        'log_level': 'INFO',
+        'monitoring_interval': 10
+    }
+
+    bm = BeliefManager(config)
+    print("âœ… Belief Manager initialized")
+
+    # 2. Update beliefs dengan confidence scoring
+    test_beliefs = [
+        ('system_health', 'healthy', 0.9, 'system_monitor'),
+        ('user_preference', 'dark_mode', 0.7, 'user_input'),
+        ('weather', {'temp': 25, 'condition': 'sunny'}, 0.8, 'weather_api'),
+        ('resource_usage', {'cpu': 45, 'memory': 67}, 0.85, 'system_monitor'),
+        ('temp_data', 'test_value', 0.6, 'test', 30)  # 30 second TTL
+    ]
+
+    for key, value, confidence, source, *ttl in test_beliefs:
+        ttl_val = ttl[0] if ttl else None
+        success = bm.update_belief(key, value, confidence, source, ttl_val)
+        print(f"{'âœ…' if success else 'âŒ'} Updated belief: {key}")
+
+    time.sleep(1)  # Allow processing
+
+    # 3. Get belief with uncertainty calculation
+    belief_data = bm.get_belief('system_health', include_uncertainty=True)
+    if belief_data:
+        belief, uncertainty = belief_data
+        print(f"ðŸ“Š Belief: {belief.key} = {belief.value}, Confidence: {belief.confidence}, Uncertainty: {uncertainty:.3f}")
+
+    # 4. Filter beliefs by confidence
+    high_conf_beliefs = bm.get_beliefs_by_confidence(min_confidence=0.8)
+    print(f"ðŸ” High confidence beliefs: {len(high_conf_beliefs)}")
+
+    # 5. Get comprehensive stats
+    stats = bm.get_stats()
+    print(f"ðŸ“ˆ Stats: {stats['beliefs_created']} created, {stats['beliefs_updated']} updated, {stats['total_operations']} total ops")
+
+    # 6. Health status
+    health = bm.get_health_status()
+    print(f"ðŸ’Š Health: {health['status']} (Score: {health['health_score']})")
+
+    # 7. Export and import test
+    exported = bm.export_beliefs()
+    print(f"ðŸ“¤ Exported {len(exported)} beliefs")
+
+    # Wait a bit to see TTL expiration
+    print("â³ Waiting for TTL expiration...")
+    time.sleep(35)
+
+    # Check if temp_data expired
+    temp_belief = bm.get_belief('temp_data')
+    print(f"ðŸ• TTL test: temp_data {'expired' if temp_belief is None else 'still valid'}")
+
+    # 8. Graceful shutdown
+    bm.shutdown()
+    print("âœ… Example completed successfully")
+
+if __name__ == "__main__":
+    example_usage()"

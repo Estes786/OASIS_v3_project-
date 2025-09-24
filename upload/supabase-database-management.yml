@@ -1,0 +1,278 @@
+name: 🗄️ Supabase Database Management
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['supabase/migrations/**', 'supabase/seed.sql', 'database/schema/**']
+  pull_request:
+    branches: [main]
+    paths: ['supabase/migrations/**', 'supabase/seed.sql', 'database/schema/**']
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Database operation'
+        required: true
+        default: 'migrate'
+        type: choice
+        options: ['migrate', 'reset', 'backup', 'restore']
+      target_environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: ['staging', 'production']
+
+env:
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  SUPABASE_PROJECT_ID_STAGING: ${{ secrets.SUPABASE_PROJECT_ID_STAGING }}
+  SUPABASE_PROJECT_ID_PRODUCTION: ${{ secrets.SUPABASE_PROJECT_ID_PRODUCTION }}
+
+jobs:
+  validate_schema:
+    name: ✅ Validate Database Schema
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐘 Setup PostgreSQL
+        uses: harmon758/postgresql-action@v1
+        with:
+          postgresql version: '15'
+          postgresql db: oasis_test
+          postgresql user: test_user
+          postgresql password: test_password
+
+      - name: 📦 Install Supabase CLI
+        run: |
+          curl -fsSL https://supabase.com/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: 🔍 Validate Migration Files
+        run: |
+          echo "🔍 Validating migration syntax..."
+
+          # Check SQL syntax for all migration files
+          for migration in supabase/migrations/*.sql; do
+            echo "Checking: $migration"
+            psql -h localhost -U test_user -d oasis_test -f "$migration" --dry-run
+          done
+
+      - name: 🧪 Test Migrations on Fresh Database
+        run: |
+          # Initialize fresh Supabase project for testing
+          cd supabase/
+          supabase init
+
+          # Start local Supabase instance
+          supabase start
+
+          # Apply all migrations
+          supabase db push
+
+          # Run schema validation tests
+          cd ../
+          python scripts/ci/test_database_schema.py             --connection-string "postgresql://postgres:postgres@localhost:54322/postgres"
+
+      - name: 📊 Generate Schema Documentation
+        run: |
+          python scripts/ci/generate_schema_docs.py             --input-dir supabase/migrations/             --output-dir docs/database/             --format markdown
+
+  deploy_staging:
+    name: 🧪 Deploy to Staging Database
+    needs: validate_schema
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.target_environment == 'staging'
+    environment: staging
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install Supabase CLI
+        run: |
+          curl -fsSL https://supabase.com/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: 🔐 Configure Supabase Authentication
+        run: |
+          supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: 💾 Backup Current Staging Database
+        run: |
+          python scripts/ci/backup_supabase_db.py             --project-id "$SUPABASE_PROJECT_ID_STAGING"             --backup-name "staging-backup-$(date +%Y%m%d-%H%M%S)"             --output-dir backups/
+
+      - name: 🚀 Deploy Migrations to Staging
+        run: |
+          # Link to staging project
+          supabase link --project-ref "$SUPABASE_PROJECT_ID_STAGING"
+
+          # Push migrations
+          supabase db push
+
+          # Verify migration success
+          python scripts/ci/verify_migration_success.py             --project-id "$SUPABASE_PROJECT_ID_STAGING"             --expected-tables-file database/expected_tables.json
+
+      - name: 🌱 Seed Staging Data
+        run: |
+          # Apply seed data for staging environment
+          psql "$SUPABASE_STAGING_CONNECTION_STRING" -f supabase/seed_staging.sql
+
+          # Verify seed data
+          python scripts/ci/verify_seed_data.py             --environment staging             --connection-string "$SUPABASE_STAGING_CONNECTION_STRING"
+
+      - name: 🧪 Run Integration Tests
+        run: |
+          python scripts/ci/test_database_integration.py             --environment staging             --project-id "$SUPABASE_PROJECT_ID_STAGING"             --test-suite comprehensive
+
+  deploy_production:
+    name: 🏭 Deploy to Production Database
+    needs: [validate_schema, deploy_staging]
+    runs-on: ubuntu-latest
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event.inputs.target_environment == 'production')
+    environment: production
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install Supabase CLI
+        run: |
+          curl -fsSL https://supabase.com/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: 🔐 Configure Supabase Authentication
+        run: |
+          supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: 💾 Backup Production Database
+        id: backup
+        run: |
+          BACKUP_NAME="production-backup-$(date +%Y%m%d-%H%M%S)"
+          python scripts/ci/backup_supabase_db.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --backup-name "$BACKUP_NAME"             --output-dir backups/             --include-data
+
+          echo "backup_name=$BACKUP_NAME" >> $GITHUB_OUTPUT
+
+      - name: 🔄 Production Migration (with Rollback Support)
+        id: migrate
+        run: |
+          set -e
+
+          # Link to production project
+          supabase link --project-ref "$SUPABASE_PROJECT_ID_PRODUCTION"
+
+          # Create migration checkpoint
+          python scripts/ci/create_migration_checkpoint.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"
+
+          # Apply migrations with transaction support
+          supabase db push --dry-run  # Dry run first
+          supabase db push            # Actual migration
+
+          # Verify migration success
+          python scripts/ci/verify_migration_success.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --expected-tables-file database/expected_tables.json             --critical
+
+      - name: 🔄 Rollback on Failure
+        if: failure() && steps.migrate.outcome == 'failure'
+        run: |
+          echo "🚨 Production migration failed, initiating rollback..."
+
+          python scripts/ci/rollback_supabase_migration.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --backup-name "${{ steps.backup.outputs.backup_name }}"             --checkpoint-name "$(python scripts/ci/get_latest_checkpoint.py)"
+
+      - name: 🏥 Production Health Check
+        run: |
+          python scripts/ci/health_check_database.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --timeout 300             --critical
+
+      - name: 📊 Update Production Metrics
+        if: success()
+        run: |
+          python scripts/ci/update_database_metrics.py             --environment production             --migration-success true             --migration-time "$(date -Iseconds)"             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"
+
+  manage_rls_policies:
+    name: 🔒 Manage Row Level Security Policies
+    needs: [deploy_staging, deploy_production]
+    runs-on: ubuntu-latest
+    if: always() && (needs.deploy_staging.result == 'success' || needs.deploy_production.result == 'success')
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install Supabase CLI
+        run: |
+          curl -fsSL https://supabase.com/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: 🔒 Update RLS Policies
+        run: |
+          # Apply Row Level Security policies
+          python scripts/ci/apply_rls_policies.py             --policies-dir database/policies/             --staging-project-id "$SUPABASE_PROJECT_ID_STAGING"             --production-project-id "$SUPABASE_PROJECT_ID_PRODUCTION"
+
+      - name: 🧪 Test RLS Policies
+        run: |
+          # Test RLS policies with different user roles
+          python scripts/ci/test_rls_policies.py             --project-id "$SUPABASE_PROJECT_ID_STAGING"             --test-cases database/rls_test_cases.json
+
+  analytics_setup:
+    name: 📊 Setup Analytics and Monitoring
+    needs: [deploy_production]
+    runs-on: ubuntu-latest
+    if: needs.deploy_production.result == 'success'
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📊 Create Analytics Views
+        run: |
+          python scripts/ci/create_analytics_views.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --views-dir database/analytics_views/
+
+      - name: 🔔 Setup Database Monitoring
+        run: |
+          python scripts/ci/setup_db_monitoring.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --alerts-config database/monitoring_config.json             --webhook-url "${{ secrets.MONITORING_WEBHOOK_URL }}"
+
+      - name: 📈 Initialize Business Metrics
+        run: |
+          python scripts/ci/initialize_business_metrics.py             --project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --metrics-config database/business_metrics.json
+
+  cleanup:
+    name: 🧹 Database Cleanup
+    needs: [deploy_staging, deploy_production, analytics_setup]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🧹 Cleanup Old Backups
+        run: |
+          python scripts/ci/cleanup_old_backups.py             --backup-dir backups/             --retention-days 30             --keep-weekly 4             --keep-monthly 12
+
+      - name: 🔍 Database Maintenance
+        run: |
+          python scripts/ci/database_maintenance.py             --staging-project-id "$SUPABASE_PROJECT_ID_STAGING"             --production-project-id "$SUPABASE_PROJECT_ID_PRODUCTION"             --operations "vacuum,analyze,reindex"
+
+      - name: 📋 Generate Migration Report
+        run: |
+          python scripts/ci/generate_migration_report.py             --output-file migration_report.md             --include-performance-metrics             --include-security-analysis
+
+          # Add to step summary
+          cat migration_report.md >> $GITHUB_STEP_SUMMARY
+
+  notification:
+    name: 📢 Database Deployment Notifications
+    needs: [deploy_staging, deploy_production, analytics_setup]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📊 Generate Deployment Summary
+        run: |
+          python scripts/ci/generate_db_deployment_summary.py             --staging-status "${{ needs.deploy_staging.result }}"             --production-status "${{ needs.deploy_production.result }}"             --analytics-status "${{ needs.analytics_setup.result }}"             --output-file db_summary.json
+
+      - name: 📱 Send Database Notifications
+        run: |
+          python scripts/ci/send_db_notifications.py             --summary-file db_summary.json             --slack-webhook "${{ secrets.SLACK_WEBHOOK }}"             --discord-webhook "${{ secrets.DISCORD_WEBHOOK }}"

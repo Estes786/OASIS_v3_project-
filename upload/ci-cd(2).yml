@@ -1,0 +1,112 @@
+name: FMAA BDI Agent CI/CD Pipeline
+# Automated testing, building, and deployment for FMAA BDI Agent
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r configs/requirements-dev.txt
+
+    - name: Run belief manager tests
+      run: |
+        python -m pytest tests/test_belief_manager.py -v
+
+    - name: Run desire engine tests
+      run: |
+        python -m pytest tests/test_desire_engine.py -v
+
+    - name: Run integration tests
+      run: |
+        python tests/integration_tests.py
+
+    - name: Performance benchmarks
+      run: |
+        python tests/performance_tests.py
+
+  build-docker:
+    name: Build Docker Images
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push belief manager
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./dockerfiles/Dockerfile.belief-manager
+        push: true
+        tags: |
+          fmaa/belief-manager:latest
+          fmaa/belief-manager:${{ github.sha }}
+
+    - name: Build and push desire engine
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./dockerfiles/Dockerfile.desire-engine
+        push: true
+        tags: |
+          fmaa/desire-engine:latest
+          fmaa/desire-engine:${{ github.sha }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [test, build-docker]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Deploy to Kubernetes Staging
+      run: |
+        kubectl set image deployment/fmaa-belief-manager belief-manager=fmaa/belief-manager:${{ github.sha }}
+        kubectl set image deployment/fmaa-desire-engine desire-engine=fmaa/desire-engine:${{ github.sha }}
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [test, build-docker]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Deploy to Production
+      run: |
+        # Production deployment steps
+        echo "🚀 Deploying to production..."

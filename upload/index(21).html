@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OASIS Monitoring & Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 300;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .dashboard {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: #E3F2FD;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: #B3E5FC;
+            margin-top: 0.5rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .events-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #4CAF50;
+        }
+
+        .event-item.warning {
+            border-left-color: #FF9800;
+        }
+
+        .event-item.error {
+            border-left-color: #F44336;
+        }
+
+        .event-time {
+            font-size: 0.8rem;
+            color: #B3E5FC;
+        }
+
+        .alert-item {
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            background: rgba(255, 152, 0, 0.1);
+            border-radius: 6px;
+            border-left: 3px solid #FF9800;
+        }
+
+        .alert-item.resolved {
+            background: rgba(76, 175, 80, 0.1);
+            border-left-color: #4CAF50;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #B3E5FC;
+        }
+
+        .refresh-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .wide-card {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 768px) {
+            .wide-card {
+                grid-column: span 1;
+            }
+            
+            .dashboard {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <div class="status-indicator"></div>
+            OASIS Monitoring & Analytics Dashboard
+            <button class="refresh-btn" onclick="refreshDashboard()">Refresh</button>
+        </h1>
+    </div>
+
+    <div class="dashboard">
+        <!-- System Status Card -->
+        <div class="card">
+            <h2>System Status</h2>
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-value" id="uptime">99.9%</div>
+                    <div class="metric-label">Uptime</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="response-time">0.14s</div>
+                    <div class="metric-label">Avg Response</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="active-alerts">0</div>
+                    <div class="metric-label">Active Alerts</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="requests-hour">1,247</div>
+                    <div class="metric-label">Requests/Hour</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Metrics Card -->
+        <div class="card">
+            <h2>Performance Metrics</h2>
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-value" id="cpu-usage">23.5%</div>
+                    <div class="metric-label">CPU Usage</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="memory-usage">45.2%</div>
+                    <div class="metric-label">Memory Usage</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="api-calls">4,892</div>
+                    <div class="metric-label">API Calls</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="model-accuracy">99.46%</div>
+                    <div class="metric-label">Model Accuracy</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Business Metrics Card -->
+        <div class="card">
+            <h2>Business Metrics</h2>
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-value" id="monthly-revenue">$46,650</div>
+                    <div class="metric-label">Monthly Revenue</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="customer-count">1,247</div>
+                    <div class="metric-label">Active Customers</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="churn-rate">2.3%</div>
+                    <div class="metric-label">Churn Rate</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="growth-rate">+23.5%</div>
+                    <div class="metric-label">Growth Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Operations Card -->
+        <div class="card">
+            <h2>AI Operations</h2>
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-value" id="quantum-ops">15,847</div>
+                    <div class="metric-label">Quantum Operations</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="consciousness-level">95.7%</div>
+                    <div class="metric-label">Consciousness Level</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="autonomy-level">99.8%</div>
+                    <div class="metric-label">Autonomy Level</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="evolution-cycles">342</div>
+                    <div class="metric-label">Evolution Cycles</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Chart -->
+        <div class="card wide-card">
+            <h2>Performance Trends (24 Hours)</h2>
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Revenue Chart -->
+        <div class="card wide-card">
+            <h2>Revenue Trends (30 Days)</h2>
+            <div class="chart-container">
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Events -->
+        <div class="card">
+            <h2>Recent Events</h2>
+            <div class="events-list" id="events-list">
+                <div class="loading">Loading events...</div>
+            </div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="card">
+            <h2>Active Alerts</h2>
+            <div class="events-list" id="alerts-list">
+                <div class="loading">Loading alerts...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let performanceChart, revenueChart;
+
+        // Initialize charts
+        function initCharts() {
+            // Performance Chart
+            const perfCtx = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(perfCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Response Time (s)',
+                        data: [],
+                        borderColor: '#4CAF50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'CPU Usage (%)',
+                        data: [],
+                        borderColor: '#2196F3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'white' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: { 
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+
+            // Revenue Chart
+            const revCtx = document.getElementById('revenueChart').getContext('2d');
+            revenueChart = new Chart(revCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Daily Revenue ($)',
+                        data: [],
+                        backgroundColor: 'rgba(76, 175, 80, 0.6)',
+                        borderColor: '#4CAF50',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'white' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: { 
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fetch dashboard data
+        async function fetchDashboardData() {
+            try {
+                const response = await fetch('/api/monitoring/dashboard');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateDashboard(data.dashboard);
+                }
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+            }
+        }
+
+        // Update dashboard with new data
+        function updateDashboard(dashboard) {
+            const metrics = dashboard.current_metrics;
+            const systemStatus = dashboard.system_status;
+            const revenueData = dashboard.revenue_data;
+
+            // Update system status
+            document.getElementById('uptime').textContent = systemStatus.uptime_percentage.toFixed(1) + '%';
+            document.getElementById('active-alerts').textContent = systemStatus.active_alerts;
+            
+            // Update performance metrics
+            if (metrics.response_time) {
+                document.getElementById('response-time').textContent = metrics.response_time.toFixed(2) + 's';
+            }
+            if (metrics.cpu_usage) {
+                document.getElementById('cpu-usage').textContent = metrics.cpu_usage.toFixed(1) + '%';
+            }
+            if (metrics.memory_usage) {
+                document.getElementById('memory-usage').textContent = metrics.memory_usage.toFixed(1) + '%';
+            }
+            if (metrics.requests_per_hour) {
+                document.getElementById('requests-hour').textContent = metrics.requests_per_hour.toLocaleString();
+            }
+            if (metrics.api_calls) {
+                document.getElementById('api-calls').textContent = metrics.api_calls.toLocaleString();
+            }
+            if (metrics.model_accuracy) {
+                document.getElementById('model-accuracy').textContent = metrics.model_accuracy.toFixed(2) + '%';
+            }
+
+            // Update business metrics
+            document.getElementById('monthly-revenue').textContent = '$' + revenueData.monthly_revenue.toLocaleString();
+            document.getElementById('customer-count').textContent = revenueData.customer_count.toLocaleString();
+            document.getElementById('churn-rate').textContent = revenueData.churn_rate.toFixed(1) + '%';
+
+            // Update AI operations
+            if (metrics.quantum_operations) {
+                document.getElementById('quantum-ops').textContent = metrics.quantum_operations.toLocaleString();
+            }
+
+            // Update events
+            updateEventsList(dashboard.recent_events);
+            
+            // Update alerts
+            updateAlertsList(dashboard.active_alerts);
+        }
+
+        // Update events list
+        function updateEventsList(events) {
+            const eventsList = document.getElementById('events-list');
+            if (events && events.length > 0) {
+                eventsList.innerHTML = events.map(event => `
+                    <div class="event-item ${event.severity}">
+                        <div>${event.message}</div>
+                        <div class="event-time">${new Date(event.timestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+            } else {
+                eventsList.innerHTML = '<div class="loading">No recent events</div>';
+            }
+        }
+
+        // Update alerts list
+        function updateAlertsList(alerts) {
+            const alertsList = document.getElementById('alerts-list');
+            if (alerts && alerts.length > 0) {
+                alertsList.innerHTML = alerts.map(alert => `
+                    <div class="alert-item ${alert.resolved ? 'resolved' : ''}">
+                        <div><strong>${alert.type}:</strong> ${alert.message}</div>
+                        <div class="event-time">${new Date(alert.timestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+            } else {
+                alertsList.innerHTML = '<div class="loading">No active alerts</div>';
+            }
+        }
+
+        // Fetch performance analytics for charts
+        async function fetchPerformanceAnalytics() {
+            try {
+                const response = await fetch('/api/monitoring/analytics/performance?hours=24');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updatePerformanceChart(data.performance_analytics);
+                }
+            } catch (error) {
+                console.error('Error fetching performance analytics:', error);
+            }
+        }
+
+        // Update performance chart
+        function updatePerformanceChart(analytics) {
+            if (analytics.response_time && analytics.cpu_usage) {
+                const responseData = analytics.response_time.data;
+                const cpuData = analytics.cpu_usage.data;
+                
+                const labels = responseData.map(item => 
+                    new Date(item.timestamp).toLocaleTimeString()
+                ).slice(-12); // Last 12 hours
+                
+                performanceChart.data.labels = labels;
+                performanceChart.data.datasets[0].data = responseData.map(item => item.value).slice(-12);
+                performanceChart.data.datasets[1].data = cpuData.map(item => item.value).slice(-12);
+                performanceChart.update();
+            }
+        }
+
+        // Fetch business analytics for revenue chart
+        async function fetchBusinessAnalytics() {
+            try {
+                const response = await fetch('/api/monitoring/analytics/business');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateRevenueChart(data.business_analytics.revenue_trend);
+                }
+            } catch (error) {
+                console.error('Error fetching business analytics:', error);
+            }
+        }
+
+        // Update revenue chart
+        function updateRevenueChart(revenueTrend) {
+            const labels = revenueTrend.map(item => 
+                new Date(item.date).toLocaleDateString()
+            ).slice(-14); // Last 2 weeks
+            
+            const data = revenueTrend.map(item => item.revenue).slice(-14);
+            
+            revenueChart.data.labels = labels;
+            revenueChart.data.datasets[0].data = data;
+            revenueChart.update();
+        }
+
+        // Refresh dashboard
+        function refreshDashboard() {
+            fetchDashboardData();
+            fetchPerformanceAnalytics();
+            fetchBusinessAnalytics();
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            refreshDashboard();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(refreshDashboard, 30000);
+        });
+    </script>
+</body>
+</html>

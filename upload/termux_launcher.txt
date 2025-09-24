@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""
+OASIS 2.0 - Termux-Optimized Launcher
+Fixed for Termux environment with zero import issues
+"""
+
+import os
+import json
+import requests
+import time
+from pathlib import Path
+from datetime import datetime
+
+# Termux-compatible configuration directly embedded
+class TermuxOASIS:
+    """Termux-optimized OASIS with embedded configuration"""
+    
+    def __init__(self):
+        self.base_dir = Path(__file__).parent
+        self.hf_token = self._get_token()
+        
+        # API configuration
+        self.api_base = "https://api-inference.huggingface.co/models"
+        self.api_timeout = 60
+        
+        # Models configuration
+        self.models = {
+            "text_generation": "microsoft/DialoGPT-medium",
+            "text_classification": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "summarization": "facebook/bart-large-cnn",
+            "translation": "Helsinki-NLP/opus-mt-en-id"
+        }
+        
+        # Pricing configuration
+        self.pricing = {
+            "text_generation": 0.05,
+            "text_classification": 0.01,
+            "summarization": 0.03,
+            "translation": 0.02
+        }
+        
+        # Statistics
+        self.stats = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "total_revenue": 0.0
+        }
+        
+        # Initialize system
+        self._initialize()
+    
+    def _initialize(self):
+        """Initialize OASIS system"""
+        print("🌟 OASIS 2.0 - TERMUX OPTIMIZED 🌟")
+        print("=" * 50)
+        print("📱 Ultra-lightweight for mobile devices")
+        print("🚀 Pure API-First Architecture")
+        print("💡 Zero heavy dependencies")
+        print("=" * 50)
+        
+        if not self.hf_token:
+            print("\n⚠️ HF_TOKEN not configured!")
+            print("🔧 SETUP REQUIRED:")
+            print("1. Get token from: https://huggingface.co/settings/tokens")
+            print("2. Run: python set_token.py YOUR_TOKEN")
+            print("3. Or set environment variable: export HF_TOKEN=your_token")
+            return False
+        
+        print(f"\n✅ Token configured: {self.hf_token[:10]}...")
+        print("🎯 System ready for AI operations!")
+        return True
+    
+    def _get_token(self):
+        """Get HF token from multiple sources"""
+        # Try environment variable first
+        token = os.getenv("HF_TOKEN", "").strip()
+        if token and token != "your_hugging_face_token_here":
+            return token
+        
+        # Try config file
+        config_file = self.base_dir / "config" / ".env"
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    for line in f:
+                        if line.startswith("HF_TOKEN="):
+                            token = line.split("=", 1)[1].strip()
+                            if token != "your_hugging_face_token_here":
+                                return token
+            except Exception:
+                pass
+        
+        return None
+    
+    def call_api(self, model_name, prompt, parameters=None):
+        """Make API call to Hugging Face"""
+        if not self.hf_token:
+            return {"status": "error", "error": "No HF_TOKEN configured"}
+        
+        url = f"{self.api_base}/{model_name}"
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+        payload = {"inputs": prompt}
+        
+        if parameters:
+            payload["parameters"] = parameters
+        
+        print(f"📡 Calling {model_name}...")
+        
+        try:
+            response = requests.post(
+                url, 
+                headers=headers, 
+                json=payload, 
+                timeout=self.api_timeout
+            )
+            response.raise_for_status()
+            return {"status": "success", "result": response.json()}
+        
+        except requests.exceptions.RequestException as e:
+            print(f"❌ API Error: {e}")
+            return {"status": "error", "error": str(e)}
+    
+    def text_generation(self, prompt):
+        """Generate text using AI"""
+        self.stats["total_requests"] += 1
+        start_time = time.time()
+        
+        result = self.call_api(self.models["text_generation"], prompt)
+        processing_time = time.time() - start_time
+        
+        if result["status"] == "success":
+            self.stats["successful_requests"] += 1
+            revenue = self.pricing["text_generation"]
+            self.stats["total_revenue"] += revenue
+            
+            try:
+                text = result["result"][0]["generated_text"]
+                print(f"✅ Generated in {processing_time:.2f}s - Revenue: ${revenue}")
+                return {"status": "success", "text": text, "revenue": revenue}
+            except Exception:
+                text = str(result["result"])
+                return {"status": "success", "text": text, "revenue": revenue}
+        else:
+            self.stats["failed_requests"] += 1
+            return {"status": "error", "error": result["error"]}
+    
+    def text_classification(self, text):
+        """Classify text sentiment"""
+        self.stats["total_requests"] += 1
+        start_time = time.time()
+        
+        result = self.call_api(self.models["text_classification"], text)
+        processing_time = time.time() - start_time
+        
+        if result["status"] == "success":
+            self.stats["successful_requests"] += 1
+            revenue = self.pricing["text_classification"]
+            self.stats["total_revenue"] += revenue
+            
+            try:
+                classification = result["result"][0]
+                print(f"✅ Classified in {processing_time:.2f}s - Revenue: ${revenue}")
+                return {"status": "success", "classification": classification, "revenue": revenue}
+            except Exception:
+                classification = result["result"]
+                return {"status": "success", "classification": classification, "revenue": revenue}
+        else:
+            self.stats["failed_requests"] += 1
+            return {"status": "error", "error": result["error"]}
+    
+    def summarization(self, text):
+        """Summarize text"""
+        self.stats["total_requests"] += 1
+        start_time = time.time()
+        
+        result = self.call_api(self.models["summarization"], text)
+        processing_time = time.time() - start_time
+        
+        if result["status"] == "success":
+            self.stats["successful_requests"] += 1
+            revenue = self.pricing["summarization"]
+            self.stats["total_revenue"] += revenue
+            
+            try:
+                summary = result["result"][0]["summary_text"]
+                print(f"✅ Summarized in {processing_time:.2f}s - Revenue: ${revenue}")
+                return {"status": "success", "summary": summary, "revenue": revenue}
+            except Exception:
+                summary = str(result["result"])
+                return {"status": "success", "summary": summary, "revenue": revenue}
+        else:
+            self.stats["failed_requests"] += 1
+            return {"status": "error", "error": result["error"]}
+    
+    def translation(self, text):
+        """Translate text EN->ID"""
+        self.stats["total_requests"] += 1
+        start_time = time.time()
+        
+        result = self.call_api(self.models["translation"], text)
+        processing_time = time.time() - start_time
+        
+        if result["status"] == "success":
+            self.stats["successful_requests"] += 1
+            revenue = self.pricing["translation"]
+            self.stats["total_revenue"] += revenue
+            
+            try:
+                translation = result["result"][0]["translation_text"]
+                print(f"✅ Translated in {processing_time:.2f}s - Revenue: ${revenue}")
+                return {"status": "success", "translation": translation, "revenue": revenue}
+            except Exception:
+                translation = str(result["result"])
+                return {"status": "success", "translation": translation, "revenue": revenue}
+        else:
+            self.stats["failed_requests"] += 1
+            return {"status": "error", "error": result["error"]}
+    
+    def show_stats(self):
+        """Display system statistics"""
+        print("\n" + "="*50)
+        print("📊 OASIS 2.0 STATISTICS")
+        print("="*50)
+        print(f"📈 Total Requests: {self.stats['total_requests']}")
+        print(f"✅ Successful: {self.stats['successful_requests']}")
+        print(f"❌ Failed: {self.stats['failed_requests']}")
+        print(f"💰 Revenue Generated: ${self.stats['total_revenue']:.2f}")
+        
+        if self.stats['total_requests'] > 0:
+            success_rate = (self.stats['successful_requests'] / self.stats['total_requests']) * 100
+            print(f"🎯 Success Rate: {success_rate:.1f}%")
+        
+        print("="*50)
+    
+    def interactive_mode(self):
+        """Interactive command-line interface"""
+        if not self.hf_token:
+            print("❌ Cannot start interactive mode without HF_TOKEN")
+            return
+        
+        print("\n🎮 OASIS INTERACTIVE MODE")
+        print("="*40)
+        print("Available commands:")
+        print("1 - Text Generation")
+        print("2 - Text Classification")
+        print("3 - Text Summarization")
+        print("4 - Translation (EN->ID)")
+        print("5 - Show Statistics")
+        print("q - Quit")
+        print("="*40)
+        
+        while True:
+            try:
+                choice = input("\n🚀 Enter choice: ").strip().lower()
+                
+                if choice in ['q', 'quit']:
+                    print("👋 Goodbye!")
+                    break
+                
+                elif choice == '1':
+                    prompt = input("📝 Enter prompt: ").strip()
+                    if prompt:
+                        print("🤖 Generating text...")
+                        result = self.text_generation(prompt)
+                        if result["status"] == "success":
+                            print(f"📄 Generated: {result['text']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif choice == '2':
+                    text = input("📊 Enter text to classify: ").strip()
+                    if text:
+                        print("🔍 Classifying...")
+                        result = self.text_classification(text)
+                        if result["status"] == "success":
+                            print(f"📊 Classification: {result['classification']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif choice == '3':
+                    text = input("📝 Enter text to summarize: ").strip()
+                    if text:
+                        print("📋 Summarizing...")
+                        result = self.summarization(text)
+                        if result["status"] == "success":
+                            print(f"📋 Summary: {result['summary']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif choice == '4':
+                    text = input("🌐 Enter text to translate (EN->ID): ").strip()
+                    if text:
+                        print("🔄 Translating...")
+                        result = self.translation(text)
+                        if result["status"] == "success":
+                            print(f"🌐 Translation: {result['translation']}")
+                        else:
+                            print(f"❌ Error: {result['error']}")
+                
+                elif choice == '5':
+                    self.show_stats()
+                
+                else:
+                    print("❓ Invalid choice. Try again or 'q' to quit.")
+            
+            except KeyboardInterrupt:
+                print("\n👋 Interrupted! Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+    
+    def demo_mode(self):
+        """Run demo of all features"""
+        if not self.hf_token:
+            print("❌ Cannot run demo without HF_TOKEN")
+            return
+        
+        print("\n🎬 RUNNING COMPREHENSIVE DEMO")
+        print("="*40)
+        
+        # Demo 1: Text Generation
+        print("\n1️⃣ TEXT GENERATION DEMO")
+        print("-" * 30)
+        result = self.text_generation("The future of AI is")
+        if result["status"] == "success":
+            print(f"✨ Generated: {result['text']}")
+        else:
+            print(f"❌ Error: {result['error']}")
+        
+        # Demo 2: Text Classification
+        print("\n2️⃣ TEXT CLASSIFICATION DEMO")
+        print("-" * 35)
+        result = self.text_classification("This product is amazing!")
+        if result["status"] == "success":
+            print(f"📊 Classification: {result['classification']}")
+        else:
+            print(f"❌ Error: {result['error']}")
+        
+        # Demo 3: Summarization
+        print("\n3️⃣ SUMMARIZATION DEMO")
+        print("-" * 25)
+        text = "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris. It is named after the engineer Gustave Eiffel, whose company designed and built the tower."
+        result = self.summarization(text)
+        if result["status"] == "success":
+            print(f"📋 Summary: {result['summary']}")
+        else:
+            print(f"❌ Error: {result['error']}")
+        
+        # Show final stats
+        self.show_stats()
+        print("\n🎉 Demo complete!")
+
+def main():
+    """Main entry point"""
+    try:
+        oasis = TermuxOASIS()
+        
+        # Check command line arguments
+        import sys
+        if len(sys.argv) > 1:
+            if sys.argv[1] == "--demo":
+                oasis.demo_mode()
+            elif sys.argv[1] == "--interactive":
+                oasis.interactive_mode()
+            else:
+                print("Usage: python termux_launcher.py [--demo|--interactive]")
+        else:
+            # Default: interactive mode
+            oasis.interactive_mode()
+    
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,576 @@
+"#!/usr/bin/env python3
+"""
+OASIS v3 Termux Client - Ultra-Lightweight Mobile Command Center
+Pure Python Standard Library Implementation
+
+STRICT REQUIREMENTS:
+- ZERO external dependencies 
+- Uses ONLY Python standard library + urllib
+- Total footprint < 5MB
+- Maximum compatibility with Termux environment
+- API-first communication with HuggingFace Spaces
+
+This client serves as a mobile command center that orchestrates
+AI operations through the OASIS HuggingFace Spaces ecosystem.
+
+Author: OASIS Development Team  
+License: MIT
+"""
+
+import json
+import time
+import sys
+import os
+import platform
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+import urllib.request
+import urllib.parse
+import urllib.error
+import subprocess
+import hashlib
+import base64
+from pathlib import Path
+import argparse
+import logging
+
+# Configure minimal logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+class OASISTermuxClient:
+    """Ultra-lightweight OASIS client for Termux"""
+
+    def __init__(self, config_path: str = "oasis_config.json"):
+        # Client configuration
+        self.config_path = config_path
+        self.config = self._load_config()
+
+        # Session management
+        self.session_id = None
+        self.client_id = self._get_client_id()
+
+        # API endpoints (will be updated after registration)
+        self.orchestrator_url = self.config.get("orchestrator_url", "")
+        self.endpoints = {}
+
+        # Statistics tracking
+        self.stats = {
+            "requests_made": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "total_revenue": 0.0,
+            "session_start": datetime.now().isoformat(),
+            "last_activity": None
+        }
+
+        # Device information
+        self.device_info = self._get_device_info()
+
+        logger.info(f"OASIS Termux Client initialized - Client ID: {self.client_id}")
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from JSON file"""
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+                logger.info("Configuration loaded successfully")
+                return config
+            else:
+                # Default configuration
+                default_config = {
+                    "orchestrator_url": "https://your-orchestrator-space.hf.space",
+                    "api_processor_url": "https://your-api-processor-space.hf.space", 
+                    "ui_interface_url": "https://your-ui-interface-space.hf.space",
+                    "timeout": 30,
+                    "retry_attempts": 3,
+                    "debug_mode": False
+                }
+
+                # Save default config
+                with open(self.config_path, 'w') as f:
+                    json.dump(default_config, f, indent=2)
+
+                logger.info("Created default configuration file")
+                return default_config
+
+        except Exception as e:
+            logger.error(f"Config loading error: {str(e)}")
+            return {}
+
+    def _get_client_id(self) -> str:
+        """Generate or retrieve unique client ID"""
+        try:
+            # Try to get device-specific ID
+            device_id = None
+
+            # Method 1: Try Android ID (Termux specific)
+            try:
+                result = subprocess.run(
+                    ['getprop', 'ro.serialno'], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=5
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    device_id = result.stdout.strip()
+            except:
+                pass
+
+            # Method 2: Use hostname + platform info
+            if not device_id:
+                hostname = platform.node() or "unknown"
+                system_info = f"{platform.system()}-{platform.machine()}"
+                device_id = f"{hostname}-{system_info}"
+
+            # Create unique hash
+            unique_string = f"{device_id}-{platform.python_version()}"
+            client_id = hashlib.md5(unique_string.encode()).hexdigest()[:12]
+
+            return f"termux_{client_id}"
+
+        except Exception as e:
+            # Fallback: generate UUID-based ID
+            return f"termux_{str(uuid.uuid4())[:12]}"
+
+    def _get_device_info(self) -> Dict[str, Any]:
+        """Collect device information for registration"""
+        try:
+            info = {
+                "platform": platform.system(),
+                "architecture": platform.machine(),
+                "python_version": platform.python_version(),
+                "hostname": platform.node(),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Try to get Termux-specific info
+            try:
+                # Check if running in Termux
+                termux_version = os.environ.get('TERMUX_VERSION')
+                if termux_version:
+                    info['termux_version'] = termux_version
+                    info['is_termux'] = True
+                else:
+                    info['is_termux'] = False
+            except:
+                info['is_termux'] = False
+
+            return info
+
+        except Exception as e:
+            logger.warning(f"Could not collect device info: {str(e)}")
+            return {"error": str(e)}
+
+    def _http_request(self, url: str, method: str = "GET", data: Dict = None, timeout: int = 30):
+        """Make HTTP request using pure urllib - NO requests library!"""
+        try:
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': f'OASIS-Termux-Client/{self.client_id}',
+                'Accept': 'application/json'
+            }
+
+            # Prepare request
+            if method.upper() == "POST" and data:
+                json_data = json.dumps(data).encode('utf-8')
+                req = urllib.request.Request(url, data=json_data, headers=headers)
+                req.get_method = lambda: 'POST'
+            else:
+                req = urllib.request.Request(url, headers=headers)
+
+            # Make request with timeout
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                response_data = response.read().decode('utf-8')
+
+                if response.status == 200:
+                    return {
+                        "success": True,
+                        "data": json.loads(response_data),
+                        "status_code": response.status
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"HTTP {response.status}",
+                        "status_code": response.status
+                    }
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8') if e.fp else "Unknown error"
+            return {
+                "success": False,
+                "error": f"HTTP {e.code}: {error_body}",
+                "status_code": e.code
+            }
+
+        except urllib.error.URLError as e:
+            return {
+                "success": False,
+                "error": f"URL Error: {str(e.reason)}",
+                "status_code": None
+            }
+
+        except Exception as e:
+            return {
+                "success": False, 
+                "error": f"Request failed: {str(e)}",
+                "status_code": None
+            }
+
+    def register_with_orchestrator(self) -> bool:
+        """Register this Termux client with the orchestrator"""
+        if not self.orchestrator_url:
+            logger.error("No orchestrator URL configured")
+            return False
+
+        registration_data = {
+            "client_id": self.client_id,
+            "metadata": self.device_info
+        }
+
+        logger.info(f"Registering with orchestrator: {self.orchestrator_url}")
+
+        response = self._http_request(
+            f"{self.orchestrator_url}/register/client",
+            method="POST",
+            data=registration_data
+        )
+
+        if response["success"]:
+            result = response["data"]
+            self.session_id = result.get("session_id")
+            self.endpoints = result.get("orchestrator_endpoints", {})
+
+            logger.info(f"Registration successful! Session ID: {self.session_id}")
+            return True
+        else:
+            logger.error(f"Registration failed: {response['error']}")
+            return False
+
+    def analyze_sentiment(self, text: str, model: str = "roberta") -> Dict[str, Any]:
+        """Analyze sentiment via orchestrator"""
+        if not self.session_id:
+            if not self.register_with_orchestrator():
+                return {"error": "Not registered with orchestrator"}
+
+        endpoint = self.endpoints.get("sentiment", "/proxy/sentiment")
+        url = f"{self.orchestrator_url}{endpoint}"
+
+        data = {
+            "text": text,
+            "model": model,
+            "session_id": self.session_id
+        }
+
+        response = self._http_request(url, method="POST", data=data)
+        self._update_stats(response)
+
+        return response
+
+    def generate_text(self, prompt: str, max_length: int = 100, temperature: float = 0.7) -> Dict[str, Any]:
+        """Generate text via orchestrator"""
+        if not self.session_id:
+            if not self.register_with_orchestrator():
+                return {"error": "Not registered with orchestrator"}
+
+        endpoint = self.endpoints.get("generate", "/proxy/generate")
+        url = f"{self.orchestrator_url}{endpoint}"
+
+        data = {
+            "prompt": prompt,
+            "max_length": max_length,
+            "temperature": temperature,
+            "session_id": self.session_id
+        }
+
+        response = self._http_request(url, method="POST", data=data)
+        self._update_stats(response)
+
+        return response
+
+    def generate_content(self, content_type: str, topic: str, tone: str = "professional") -> Dict[str, Any]:
+        """Generate professional content via orchestrator"""
+        if not self.session_id:
+            if not self.register_with_orchestrator():
+                return {"error": "Not registered with orchestrator"}
+
+        endpoint = self.endpoints.get("content", "/proxy/content")
+        url = f"{self.orchestrator_url}{endpoint}"
+
+        data = {
+            "content_type": content_type,
+            "topic": topic,
+            "tone": tone,
+            "session_id": self.session_id
+        }
+
+        response = self._http_request(url, method="POST", data=data)
+        self._update_stats(response)
+
+        return response
+
+    def get_system_stats(self) -> Dict[str, Any]:
+        """Get system statistics from orchestrator"""
+        if not self.orchestrator_url:
+            return {"error": "No orchestrator configured"}
+
+        endpoint = self.endpoints.get("stats", "/system/overview")
+        url = f"{self.orchestrator_url}{endpoint}"
+
+        response = self._http_request(url)
+        return response
+
+    def _update_stats(self, response: Dict[str, Any]):
+        """Update local statistics"""
+        self.stats["requests_made"] += 1
+        self.stats["last_activity"] = datetime.now().isoformat()
+
+        if response["success"]:
+            self.stats["successful_requests"] += 1
+
+            # Track revenue if present
+            if "data" in response and isinstance(response["data"], dict):
+                revenue = response["data"].get("revenue_generated", 0.0)
+                if isinstance(revenue, (int, float)):
+                    self.stats["total_revenue"] += revenue
+        else:
+            self.stats["failed_requests"] += 1
+
+    def print_stats(self):
+        """Print current session statistics"""
+        print("\n" + "="*50)
+        print("ðŸ“Š OASIS TERMUX CLIENT STATISTICS")
+        print("="*50)
+        print(f"Client ID: {self.client_id}")
+        print(f"Session ID: {self.session_id or 'Not registered'}")
+        print(f"Requests Made: {self.stats['requests_made']}")
+        print(f"Successful: {self.stats['successful_requests']}")
+        print(f"Failed: {self.stats['failed_requests']}")
+        print(f"Total Revenue: ${self.stats['total_revenue']:.2f}")
+        print(f"Session Start: {self.stats['session_start']}")
+        print(f"Last Activity: {self.stats['last_activity'] or 'None'}")
+        print("="*50)
+
+    def interactive_mode(self):
+        """Start interactive command mode"""
+        print("\nðŸš€ OASIS v3 Termux Client - Interactive Mode")
+        print("Type 'help' for available commands, 'quit' to exit\n")
+
+        # Register if not already registered
+        if not self.session_id:
+            print("ðŸ“¡ Registering with orchestrator...")
+            if not self.register_with_orchestrator():
+                print("âŒ Registration failed. Some features may not work.")
+            else:
+                print("âœ… Registration successful!")
+
+        while True:
+            try:
+                command = input("OASIS> ").strip()
+
+                if command.lower() in ['quit', 'exit', 'q']:
+                    print("ðŸ‘‹ Goodbye!")
+                    break
+
+                elif command.lower() == 'help':
+                    self._print_help()
+
+                elif command.lower() == 'stats':
+                    self.print_stats()
+
+                elif command.lower() == 'register':
+                    if self.register_with_orchestrator():
+                        print("âœ… Registration successful!")
+                    else:
+                        print("âŒ Registration failed!")
+
+                elif command.startswith('sentiment '):
+                    text = command[10:].strip()
+                    if text:
+                        print("ðŸ” Analyzing sentiment...")
+                        result = self.analyze_sentiment(text)
+                        self._print_result(result)
+                    else:
+                        print("âŒ Please provide text to analyze")
+
+                elif command.startswith('generate '):
+                    prompt = command[9:].strip()
+                    if prompt:
+                        print("âœï¸ Generating text...")
+                        result = self.generate_text(prompt)
+                        self._print_result(result)
+                    else:
+                        print("âŒ Please provide a prompt")
+
+                elif command.startswith('content '):
+                    params = command[8:].strip().split(' ', 2)
+                    if len(params) >= 2:
+                        content_type, topic = params[0], params[1]
+                        tone = params[2] if len(params) > 2 else "professional"
+
+                        print(f"ðŸ“ Generating {content_type} content...")
+                        result = self.generate_content(content_type, topic, tone)
+                        self._print_result(result)
+                    else:
+                        print("âŒ Usage: content <type> <topic> [tone]")
+
+                elif command.lower() == 'system':
+                    print("ðŸ“Š Getting system stats...")
+                    result = self.get_system_stats()
+                    self._print_result(result)
+
+                elif command == '':
+                    continue
+
+                else:
+                    print(f"âŒ Unknown command: {command}. Type 'help' for available commands.")
+
+            except KeyboardInterrupt:
+                print("\nðŸ‘‹ Goodbye!")
+                break
+            except Exception as e:
+                print(f"âŒ Error: {str(e)}")
+
+    def _print_help(self):
+        """Print available commands"""
+        help_text = """
+ðŸš€ OASIS v3 Termux Client Commands:
+
+ðŸ“Š System Commands:
+  help              - Show this help message
+  stats             - Show session statistics
+  register          - Register with orchestrator
+  system            - Get system overview
+  quit/exit/q       - Exit the client
+
+ðŸ¤– AI Commands:
+  sentiment <text>             - Analyze sentiment of text
+  generate <prompt>            - Generate text from prompt
+  content <type> <topic> [tone] - Generate professional content
+
+ðŸ“ Content Types: article, social_media, email, blog
+ðŸŽ­ Tones: professional, casual, formal, friendly
+
+ðŸ’¡ Examples:
+  sentiment "I love this product!"
+  generate "The future of AI is"
+  content article "Climate Change" professional
+
+ðŸ’° Revenue tracking is automatic for all AI operations.
+"""
+        print(help_text)
+
+    def _print_result(self, result: Dict[str, Any]):
+        """Print API result in formatted way"""
+        if result["success"]:
+            data = result["data"]
+
+            if "sentiment" in data:
+                print(f"ðŸ“Š Sentiment: {data['sentiment'].upper()}")
+                print(f"ðŸŽ¯ Confidence: {data['confidence']:.2f}")
+                print(f"ðŸ’° Revenue: ${data.get('revenue_generated', 0):.2f}")
+
+            elif "generated_text" in data:
+                print(f"âœ¨ Generated Text:\n{data['generated_text']}")
+                print(f"ðŸ’° Revenue: ${data.get('revenue_generated', 0):.2f}")
+
+            elif "content" in data:
+                print(f"ðŸ“ Generated Content ({data['content_type']}):")
+                print(f"{data['content']}")
+                print(f"ðŸ“Š Word Count: {data.get('word_count', 0)}")
+                print(f"ðŸ’° Revenue: ${data.get('revenue_generated', 0):.2f}")
+
+            else:
+                print(f"âœ… Result: {json.dumps(data, indent=2)}")
+        else:
+            print(f"âŒ Error: {result['error']}")
+
+
+def main():
+    """Main function with command line interface"""
+    parser = argparse.ArgumentParser(
+        description="OASIS v3 Termux Client - Ultra-lightweight AI command center"
+    )
+
+    parser.add_argument(
+        '--config', 
+        default='oasis_config.json',
+        help='Configuration file path (default: oasis_config.json)'
+    )
+
+    parser.add_argument(
+        '--sentiment',
+        help='Analyze sentiment of provided text'
+    )
+
+    parser.add_argument(
+        '--generate',
+        help='Generate text from provided prompt'
+    )
+
+    parser.add_argument(
+        '--content',
+        nargs='+',
+        help='Generate content: --content <type> <topic> [tone]'
+    )
+
+    parser.add_argument(
+        '--stats',
+        action='store_true',
+        help='Show current statistics'
+    )
+
+    parser.add_argument(
+        '--interactive', '-i',
+        action='store_true',
+        help='Start interactive mode'
+    )
+
+    args = parser.parse_args()
+
+    # Initialize client
+    try:
+        client = OASISTermuxClient(args.config)
+
+        # Command line operations
+        if args.sentiment:
+            result = client.analyze_sentiment(args.sentiment)
+            client._print_result(result)
+
+        elif args.generate:
+            result = client.generate_text(args.generate)
+            client._print_result(result)
+
+        elif args.content:
+            if len(args.content) >= 2:
+                content_type, topic = args.content[0], args.content[1]
+                tone = args.content[2] if len(args.content) > 2 else "professional"
+                result = client.generate_content(content_type, topic, tone)
+                client._print_result(result)
+            else:
+                print("âŒ Content requires at least type and topic")
+
+        elif args.stats:
+            client.print_stats()
+
+        elif args.interactive:
+            client.interactive_mode()
+
+        else:
+            # Default to interactive mode if no specific command
+            client.interactive_mode()
+
+    except Exception as e:
+        logger.error(f"Client initialization failed: {str(e)}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()"

@@ -1,0 +1,32 @@
+"# OASIS v3 - Termux Requirements
+# CRITICAL: ZERO external dependencies policy
+# Uses ONLY Python standard library
+
+# NO EXTERNAL PACKAGES ALLOWED:
+# âŒ requests
+# âŒ numpy
+# âŒ pandas
+# âŒ scikit-learn
+# âŒ torch
+# âŒ tensorflow
+# âŒ gradio
+# âŒ matplotlib
+# âŒ aiohttp
+# âŒ asyncio (except standard library)
+
+# ALLOWED: Python 3.8+ standard library ONLY:
+# âœ… urllib.request
+# âœ… json
+# âœ… datetime
+# âœ… sys
+# âœ… os
+# âœ… time
+# âœ… hashlib
+# âœ… base64
+# âœ… gzip (for compression)
+
+# Installation command for Termux:
+# pkg install python
+# python oasis_orchestrator.py
+
+# Ultra-lightweight: <5MB total footprint"

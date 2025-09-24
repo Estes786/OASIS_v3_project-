@@ -1,0 +1,625 @@
+#!/usr/bin/env python3
+"""
+OASIS v3 Business Engine
+Advanced Business Logic Integration and Revenue Tracking
+
+Comprehensive business automation, revenue optimization, and performance analytics
+for the OASIS v3 ecosystem. Supports multiple monetization strategies and
+real-time business intelligence.
+
+Author: OASIS Team
+Version: 3.0.0
+License: MIT
+"""
+
+import os
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Any, Union
+import uuid
+from dataclasses import dataclass, asdict
+from enum import Enum
+
+import numpy as np
+import pandas as pd
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Business configuration
+BUSINESS_MODE = os.getenv("BUSINESS_MODE", "true").lower() == "true"
+TARGET_MONTHLY_REVENUE = float(os.getenv("TARGET_MONTHLY_REVENUE", "50000.0"))
+PREMIUM_TIER_MULTIPLIER = float(os.getenv("PREMIUM_TIER_MULTIPLIER", "5.0"))
+
+class ServiceTier(Enum):
+    """Service tier enumeration"""
+    FREE = "free"
+    BASIC = "basic"  
+    PREMIUM = "premium"
+    ENTERPRISE = "enterprise"
+
+class RevenueModel(Enum):
+    """Revenue model types"""
+    PAY_PER_REQUEST = "pay_per_request"
+    SUBSCRIPTION = "subscription"
+    FREEMIUM = "freemium"
+    ENTERPRISE_LICENSE = "enterprise_license"
+
+@dataclass
+class BusinessMetrics:
+    """Business metrics data structure"""
+    total_requests: int = 0
+    successful_operations: int = 0
+    failed_operations: int = 0
+    revenue_generated: float = 0.0
+    active_sessions: int = 0
+    premium_users: int = 0
+    conversion_rate: float = 0.0
+    customer_lifetime_value: float = 0.0
+    monthly_recurring_revenue: float = 0.0
+    churn_rate: float = 0.0
+
+@dataclass
+class PricingConfig:
+    """Pricing configuration for different services"""
+    text_generation: float = 0.01
+    image_classification: float = 0.05
+    sentiment_analysis: float = 0.02
+    question_answering: float = 0.03
+    text_summarization: float = 0.04
+    object_detection: float = 0.08
+    multimodal_processing: float = 0.10
+    
+    # Premium multipliers
+    premium_multiplier: float = 5.0
+    enterprise_multiplier: float = 10.0
+    
+    # Subscription pricing (monthly)
+    basic_subscription: float = 29.99
+    premium_subscription: float = 99.99
+    enterprise_subscription: float = 499.99
+
+@dataclass
+class CustomerProfile:
+    """Customer profile and behavior tracking"""
+    customer_id: str
+    tier: ServiceTier
+    signup_date: datetime
+    total_requests: int = 0
+    total_spent: float = 0.0
+    last_activity: Optional[datetime] = None
+    preferred_services: List[str] = None
+    
+    def __post_init__(self):
+        if self.preferred_services is None:
+            self.preferred_services = []
+
+class RevenueOptimizer:
+    """Advanced revenue optimization engine"""
+    
+    def __init__(self, pricing_config: PricingConfig):
+        self.pricing = pricing_config
+        self.demand_patterns = {}
+        self.price_elasticity = {}
+        
+    def calculate_dynamic_pricing(self, 
+                                service_type: str,
+                                current_demand: int,
+                                customer_tier: ServiceTier,
+                                time_of_day: int) -> float:
+        """Calculate dynamic pricing based on demand and other factors"""
+        try:
+            # Base price
+            base_price = getattr(self.pricing, service_type, 0.01)
+            
+            # Tier multiplier
+            if customer_tier == ServiceTier.PREMIUM:
+                base_price *= self.pricing.premium_multiplier
+            elif customer_tier == ServiceTier.ENTERPRISE:
+                base_price *= self.pricing.enterprise_multiplier
+            
+            # Demand-based pricing (surge pricing)
+            if service_type in self.demand_patterns:
+                avg_demand = self.demand_patterns[service_type].get("average", 100)
+                demand_multiplier = min(2.0, max(0.5, current_demand / avg_demand))
+                base_price *= demand_multiplier
+            
+            # Time-based pricing (peak hours)
+            if 9 <= time_of_day <= 17:  # Business hours
+                base_price *= 1.2
+            elif 22 <= time_of_day or time_of_day <= 6:  # Off-peak
+                base_price *= 0.8
+            
+            return round(base_price, 4)
+            
+        except Exception as e:
+            logger.error(f"Dynamic pricing calculation error: {str(e)}")
+            return getattr(self.pricing, service_type, 0.01)
+    
+    def update_demand_patterns(self, service_type: str, current_demand: int):
+        """Update demand patterns for better pricing predictions"""
+        if service_type not in self.demand_patterns:
+            self.demand_patterns[service_type] = {
+                "history": [],
+                "average": 0,
+                "peak": 0
+            }
+        
+        pattern = self.demand_patterns[service_type]
+        pattern["history"].append(current_demand)
+        
+        # Keep only last 100 data points
+        if len(pattern["history"]) > 100:
+            pattern["history"] = pattern["history"][-100:]
+        
+        pattern["average"] = sum(pattern["history"]) / len(pattern["history"])
+        pattern["peak"] = max(pattern["history"])
+    
+    def predict_revenue(self, 
+                       service_usage_forecast: Dict[str, int],
+                       days_ahead: int = 30) -> Dict[str, Any]:
+        """Predict revenue based on usage patterns"""
+        try:
+            predictions = {}
+            total_predicted_revenue = 0.0
+            
+            for service_type, predicted_usage in service_usage_forecast.items():
+                base_price = getattr(self.pricing, service_type, 0.01)
+                service_revenue = predicted_usage * base_price * days_ahead
+                
+                predictions[service_type] = {
+                    "predicted_usage": predicted_usage * days_ahead,
+                    "predicted_revenue": service_revenue,
+                    "average_price": base_price
+                }
+                
+                total_predicted_revenue += service_revenue
+            
+            return {
+                "total_predicted_revenue": total_predicted_revenue,
+                "service_predictions": predictions,
+                "forecast_period_days": days_ahead,
+                "confidence_score": 0.85  # Placeholder confidence
+            }
+            
+        except Exception as e:
+            logger.error(f"Revenue prediction error: {str(e)}")
+            return {"error": str(e)}
+
+class BusinessIntelligence:
+    """Business intelligence and analytics engine"""
+    
+    def __init__(self):
+        self.analytics_data = []
+        self.kpis = {}
+        
+    def calculate_kpis(self, metrics: BusinessMetrics) -> Dict[str, Any]:
+        """Calculate key performance indicators"""
+        try:
+            # Revenue KPIs
+            if metrics.total_requests > 0:
+                revenue_per_request = metrics.revenue_generated / metrics.total_requests
+                success_rate = metrics.successful_operations / metrics.total_requests
+            else:
+                revenue_per_request = 0.0
+                success_rate = 0.0
+            
+            # Growth metrics (placeholder - would need historical data)
+            monthly_growth_rate = 0.15  # 15% monthly growth
+            user_acquisition_cost = 25.0  # $25 CAC
+            
+            # Efficiency metrics
+            if metrics.active_sessions > 0:
+                requests_per_session = metrics.total_requests / metrics.active_sessions
+            else:
+                requests_per_session = 0.0
+            
+            kpis = {
+                "revenue_metrics": {
+                    "total_revenue": metrics.revenue_generated,
+                    "revenue_per_request": revenue_per_request,
+                    "monthly_recurring_revenue": metrics.monthly_recurring_revenue,
+                    "customer_lifetime_value": metrics.customer_lifetime_value
+                },
+                "performance_metrics": {
+                    "success_rate": success_rate,
+                    "total_requests": metrics.total_requests,
+                    "active_sessions": metrics.active_sessions,
+                    "requests_per_session": requests_per_session
+                },
+                "growth_metrics": {
+                    "conversion_rate": metrics.conversion_rate,
+                    "monthly_growth_rate": monthly_growth_rate,
+                    "user_acquisition_cost": user_acquisition_cost,
+                    "churn_rate": metrics.churn_rate
+                },
+                "efficiency_metrics": {
+                    "cost_per_request": 0.005,  # Operational cost
+                    "profit_margin": (revenue_per_request - 0.005) / revenue_per_request if revenue_per_request > 0 else 0,
+                    "scalability_score": min(100, metrics.total_requests / 1000 * 100)
+                }
+            }
+            
+            self.kpis = kpis
+            return kpis
+            
+        except Exception as e:
+            logger.error(f"KPI calculation error: {str(e)}")
+            return {"error": str(e)}
+    
+    def generate_business_report(self, 
+                               metrics: BusinessMetrics,
+                               time_period: str = "daily") -> Dict[str, Any]:
+        """Generate comprehensive business report"""
+        try:
+            kpis = self.calculate_kpis(metrics)
+            
+            # Revenue analysis
+            target_daily_revenue = TARGET_MONTHLY_REVENUE / 30
+            revenue_achievement = (metrics.revenue_generated / target_daily_revenue) * 100
+            
+            # Performance analysis
+            if metrics.total_requests > 0:
+                error_rate = (metrics.failed_operations / metrics.total_requests) * 100
+            else:
+                error_rate = 0.0
+            
+            report = {
+                "report_metadata": {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "period": time_period,
+                    "business_mode": BUSINESS_MODE
+                },
+                "executive_summary": {
+                    "total_revenue": metrics.revenue_generated,
+                    "revenue_target_achievement": f"{revenue_achievement:.1f}%",
+                    "total_requests_processed": metrics.total_requests,
+                    "success_rate": f"{(1 - error_rate/100)*100:.1f}%",
+                    "active_customers": metrics.active_sessions
+                },
+                "revenue_analysis": {
+                    "current_revenue": metrics.revenue_generated,
+                    "target_revenue": target_daily_revenue,
+                    "revenue_gap": target_daily_revenue - metrics.revenue_generated,
+                    "projected_monthly_revenue": metrics.revenue_generated * 30,
+                    "premium_revenue_share": (metrics.premium_users / max(1, metrics.active_sessions)) * 100
+                },
+                "operational_analysis": {
+                    "total_operations": metrics.total_requests,
+                    "successful_operations": metrics.successful_operations,
+                    "failed_operations": metrics.failed_operations,
+                    "success_rate_percent": (1 - error_rate/100)*100,
+                    "average_revenue_per_operation": kpis.get("revenue_metrics", {}).get("revenue_per_request", 0)
+                },
+                "customer_analysis": {
+                    "total_active_sessions": metrics.active_sessions,
+                    "premium_users": metrics.premium_users,
+                    "conversion_rate": metrics.conversion_rate,
+                    "customer_lifetime_value": metrics.customer_lifetime_value
+                },
+                "kpis": kpis,
+                "recommendations": self._generate_recommendations(metrics, kpis)
+            }
+            
+            return report
+            
+        except Exception as e:
+            logger.error(f"Business report generation error: {str(e)}")
+            return {"error": str(e)}
+    
+    def _generate_recommendations(self, 
+                                metrics: BusinessMetrics, 
+                                kpis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate business recommendations based on metrics"""
+        recommendations = []
+        
+        try:
+            # Revenue recommendations
+            if metrics.revenue_generated < TARGET_MONTHLY_REVENUE / 30:
+                recommendations.append({
+                    "category": "revenue",
+                    "priority": "high",
+                    "title": "Increase Revenue Generation",
+                    "description": "Current revenue is below daily target. Consider implementing dynamic pricing or premium features.",
+                    "action_items": [
+                        "Enable dynamic pricing during peak hours",
+                        "Launch premium tier with advanced features",
+                        "Implement volume discounts for enterprise customers"
+                    ]
+                })
+            
+            # Performance recommendations
+            if metrics.failed_operations > metrics.total_requests * 0.05:  # >5% error rate
+                recommendations.append({
+                    "category": "performance", 
+                    "priority": "high",
+                    "title": "Improve System Reliability",
+                    "description": "Error rate is above 5%. Focus on system stability and error handling.",
+                    "action_items": [
+                        "Implement better error handling",
+                        "Add redundancy for critical services",
+                        "Monitor and optimize resource usage"
+                    ]
+                })
+            
+            # Customer recommendations
+            if metrics.conversion_rate < 0.05:  # <5% conversion rate
+                recommendations.append({
+                    "category": "customer",
+                    "priority": "medium", 
+                    "title": "Improve Customer Conversion",
+                    "description": "Low conversion rate indicates need for better user experience or value proposition.",
+                    "action_items": [
+                        "Optimize onboarding process",
+                        "Offer free trial for premium features", 
+                        "Improve user interface and documentation"
+                    ]
+                })
+            
+            # Growth recommendations
+            if metrics.active_sessions < 1000:
+                recommendations.append({
+                    "category": "growth",
+                    "priority": "medium",
+                    "title": "Scale User Acquisition",
+                    "description": "Focus on acquiring more active users to reach scale.",
+                    "action_items": [
+                        "Implement referral program",
+                        "Expand marketing channels",
+                        "Partner with complementary services"
+                    ]
+                })
+            
+            return recommendations
+            
+        except Exception as e:
+            logger.error(f"Recommendations generation error: {str(e)}")
+            return []
+
+class OasisBusinessEngine:
+    """Main OASIS Business Engine"""
+    
+    def __init__(self):
+        self.metrics = BusinessMetrics()
+        self.pricing_config = PricingConfig()
+        self.revenue_optimizer = RevenueOptimizer(self.pricing_config)
+        self.business_intelligence = BusinessIntelligence()
+        self.customers = {}  # customer_id -> CustomerProfile
+        self.transactions = []
+        
+        # Performance tracking
+        self.daily_stats = {}
+        self.hourly_demand = [0] * 24
+        
+        logger.info("OASIS Business Engine initialized")
+    
+    async def process_transaction(self,
+                                customer_id: str,
+                                service_type: str,
+                                customer_tier: ServiceTier = ServiceTier.FREE,
+                                success: bool = True) -> Dict[str, Any]:
+        """Process a business transaction"""
+        try:
+            timestamp = datetime.now(timezone.utc)
+            hour = timestamp.hour
+            
+            # Update metrics
+            self.metrics.total_requests += 1
+            if success:
+                self.metrics.successful_operations += 1
+            else:
+                self.metrics.failed_operations += 1
+            
+            # Update demand tracking
+            self.hourly_demand[hour] += 1
+            self.revenue_optimizer.update_demand_patterns(service_type, self.hourly_demand[hour])
+            
+            # Calculate pricing
+            current_demand = self.hourly_demand[hour]
+            price = self.revenue_optimizer.calculate_dynamic_pricing(
+                service_type, current_demand, customer_tier, hour
+            )
+            
+            # Apply pricing based on tier
+            if customer_tier == ServiceTier.FREE:
+                # Free tier: limited requests, no charge
+                actual_price = 0.0
+            elif customer_tier == ServiceTier.BASIC:
+                actual_price = price
+            else:
+                actual_price = price
+            
+            # Update revenue
+            if success and actual_price > 0:
+                self.metrics.revenue_generated += actual_price
+            
+            # Update customer profile
+            if customer_id not in self.customers:
+                self.customers[customer_id] = CustomerProfile(
+                    customer_id=customer_id,
+                    tier=customer_tier,
+                    signup_date=timestamp
+                )
+            
+            customer = self.customers[customer_id]
+            customer.total_requests += 1
+            customer.last_activity = timestamp
+            if success and actual_price > 0:
+                customer.total_spent += actual_price
+            
+            if service_type not in customer.preferred_services:
+                customer.preferred_services.append(service_type)
+            
+            # Update session tracking
+            self.metrics.active_sessions = len([c for c in self.customers.values() 
+                                             if c.last_activity and 
+                                             (timestamp - c.last_activity).seconds < 3600])
+            
+            # Create transaction record
+            transaction = {
+                "transaction_id": str(uuid.uuid4()),
+                "customer_id": customer_id,
+                "service_type": service_type,
+                "price": actual_price,
+                "success": success,
+                "timestamp": timestamp.isoformat(),
+                "customer_tier": customer_tier.value
+            }
+            
+            self.transactions.append(transaction)
+            
+            return {
+                "status": "success",
+                "transaction": transaction,
+                "customer_stats": asdict(customer),
+                "current_metrics": asdict(self.metrics)
+            }
+            
+        except Exception as e:
+            logger.error(f"Transaction processing error: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def get_business_dashboard(self) -> Dict[str, Any]:
+        """Get comprehensive business dashboard"""
+        try:
+            # Generate current report
+            report = self.business_intelligence.generate_business_report(self.metrics)
+            
+            # Add real-time data
+            dashboard = {
+                **report,
+                "real_time_data": {
+                    "current_active_sessions": self.metrics.active_sessions,
+                    "requests_last_hour": sum(self.hourly_demand[-1:]),
+                    "revenue_today": self.metrics.revenue_generated,
+                    "success_rate_current": (
+                        self.metrics.successful_operations / max(1, self.metrics.total_requests) * 100
+                    )
+                },
+                "demand_patterns": {
+                    "hourly_distribution": self.hourly_demand,
+                    "peak_hour": self.hourly_demand.index(max(self.hourly_demand)),
+                    "average_hourly_requests": sum(self.hourly_demand) / 24
+                },
+                "customer_insights": {
+                    "total_customers": len(self.customers),
+                    "premium_customers": len([c for c in self.customers.values() 
+                                            if c.tier in [ServiceTier.PREMIUM, ServiceTier.ENTERPRISE]]),
+                    "average_customer_value": (
+                        sum([c.total_spent for c in self.customers.values()]) / 
+                        max(1, len(self.customers))
+                    ),
+                    "most_popular_services": self._get_popular_services()
+                }
+            }
+            
+            return dashboard
+            
+        except Exception as e:
+            logger.error(f"Dashboard generation error: {str(e)}")
+            return {"error": str(e)}
+    
+    def _get_popular_services(self) -> List[Dict[str, Any]]:
+        """Get most popular services based on usage"""
+        try:
+            service_counts = {}
+            for customer in self.customers.values():
+                for service in customer.preferred_services:
+                    service_counts[service] = service_counts.get(service, 0) + 1
+            
+            # Sort by popularity
+            popular_services = sorted(service_counts.items(), key=lambda x: x[1], reverse=True)
+            
+            return [{"service": service, "usage_count": count} 
+                   for service, count in popular_services[:5]]
+            
+        except Exception:
+            return []
+    
+    async def optimize_revenue_strategy(self) -> Dict[str, Any]:
+        """Generate revenue optimization recommendations"""
+        try:
+            # Analyze current performance
+            current_revenue = self.metrics.revenue_generated
+            target_revenue = TARGET_MONTHLY_REVENUE / 30
+            
+            # Generate forecasts
+            service_forecast = {}
+            for service in ["text_generation", "image_classification", "sentiment_analysis"]:
+                service_forecast[service] = max(10, self.hourly_demand[datetime.now().hour])
+            
+            revenue_prediction = self.revenue_optimizer.predict_revenue(service_forecast)
+            
+            optimization_strategy = {
+                "current_performance": {
+                    "daily_revenue": current_revenue,
+                    "target_revenue": target_revenue,
+                    "achievement_percentage": (current_revenue / target_revenue) * 100
+                },
+                "revenue_forecast": revenue_prediction,
+                "optimization_opportunities": [
+                    {
+                        "strategy": "Dynamic Pricing",
+                        "potential_increase": "15-25%",
+                        "implementation": "Enable surge pricing during peak hours",
+                        "effort": "medium"
+                    },
+                    {
+                        "strategy": "Premium Tier Upselling",
+                        "potential_increase": "30-50%",
+                        "implementation": "Promote premium features to active users",
+                        "effort": "low"
+                    },
+                    {
+                        "strategy": "Enterprise Partnerships",
+                        "potential_increase": "100-300%",
+                        "implementation": "Target enterprise customers with custom solutions",
+                        "effort": "high"
+                    }
+                ],
+                "immediate_actions": [
+                    "Enable premium tier signup",
+                    "Implement usage-based pricing alerts",
+                    "Launch customer retention campaign"
+                ]
+            }
+            
+            return optimization_strategy
+            
+        except Exception as e:
+            logger.error(f"Revenue optimization error: {str(e)}")
+            return {"error": str(e)}
+
+# Global business engine instance
+business_engine = OasisBusinessEngine()
+
+if __name__ == "__main__":
+    # Test the business engine
+    async def test_business_engine():
+        print("Testing OASIS Business Engine...")
+        
+        # Process some transactions
+        for i in range(10):
+            result = await business_engine.process_transaction(
+                customer_id=f"customer_{i}",
+                service_type="text_generation",
+                customer_tier=ServiceTier.BASIC if i % 2 == 0 else ServiceTier.FREE,
+                success=True
+            )
+            print(f"Transaction {i}: {result['status']}")
+        
+        # Get dashboard
+        dashboard = business_engine.get_business_dashboard()
+        print(f"Dashboard revenue: ${dashboard['executive_summary']['total_revenue']:.2f}")
+        
+        # Get optimization strategy
+        strategy = await business_engine.optimize_revenue_strategy()
+        print(f"Revenue achievement: {strategy['current_performance']['achievement_percentage']:.1f}%")
+    
+    asyncio.run(test_business_engine())

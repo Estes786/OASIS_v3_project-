@@ -1,0 +1,43 @@
+"#!/usr/bin/env python3
+"""
+OASIS v3 Quick Test Script
+Test orchestrator connectivity and HF endpoints
+"""
+
+import sys
+import os
+
+# Add current directory to path
+sys.path.insert(0, os.getcwd())
+
+try:
+    # Test orchestrator import
+    from oasis_orchestrator import OASISOrchestrator
+    print("âœ… Orchestrator import successful")
+
+    # Initialize orchestrator
+    orchestrator = OASISOrchestrator()
+    print("âœ… Orchestrator initialized")
+
+    # Test status
+    status = orchestrator.get_status()
+    print(f"âœ… Status check: {status['version']}")
+
+    # Test sentiment analysis
+    print("\nðŸ§ª Testing sentiment analysis...")
+    result = orchestrator.analyze_sentiment("I love this OASIS orchestrator!")
+
+    if result["success"]:
+        print("âœ… Sentiment analysis working")
+    else:
+        print(f"âŒ Sentiment error: {result['error']}")
+
+    print("\nðŸŽ‰ All tests completed!")
+
+except ImportError as e:
+    print(f"âŒ Import error: {e}")
+    print("ðŸ“ Make sure oasis_orchestrator.py is in current directory")
+
+except Exception as e:
+    print(f"âŒ Test error: {e}")
+    print("ðŸ“ Check configuration and network connectivity")"

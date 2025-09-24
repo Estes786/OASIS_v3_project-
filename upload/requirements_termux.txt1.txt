@@ -1,0 +1,28 @@
+"# OASIS v3 - Termux Requirements
+# ULTRA-MINIMAL: Only Python standard library + built-ins
+
+# CRITICAL: NO external packages allowed on Termux
+# All dependencies below are Python built-in modules:
+
+# Built-in modules used:
+# - urllib.request, urllib.parse, urllib.error (HTTP)
+# - json (JSON processing)
+# - time, datetime (timing & dates)
+# - os, sys (system interface)
+# - uuid (unique IDs)
+# - hashlib, base64 (cryptography)
+# - argparse (CLI parsing)
+
+# TOTAL TERMUX FOOTPRINT: <1MB (Python stdlib only)
+# NO pip install required - everything is built-in!
+
+# FORBIDDEN on Termux (all processing done on HF Spaces):
+# âŒ requests
+# âŒ gradio  
+# âŒ numpy
+# âŒ pandas
+# âŒ torch
+# âŒ transformers
+# âŒ scikit-learn
+# âŒ matplotlib
+# âŒ Any external dependencies"

@@ -1,0 +1,9 @@
+{
+  "hf_space_url": "https://your-space.hf.space",
+  "timeout": 30,
+  "pricing": {
+    "sentiment": 0.001,
+    "batch": 0.01
+  }
+}
+

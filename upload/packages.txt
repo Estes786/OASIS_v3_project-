@@ -1,0 +1,4 @@
+# THE NEW CIVILIZATION - System Packages
+# Ultra-lightweight system dependencies for HF Spaces
+
+curl

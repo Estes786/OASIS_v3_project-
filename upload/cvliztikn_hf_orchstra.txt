@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+"""
+THE NEW CIVILIZATION - Hugging Face Orchestrator
+Main orchestration system for coordinating all AI operations
+
+This is the heart of The New Civilization - managing and orchestrating
+all Hugging Face operations through a unified, intelligent system.
+"""
+
+import os
+import sys
+import json
+import time
+import logging
+import asyncio
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+from enum import Enum
+
+import requests
+from huggingface_hub import HfApi, login, logout
+from transformers import pipeline, AutoTokenizer, AutoModel
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress
+from rich.live import Live
+
+# Configuration
+sys.path.append(str(Path.home() / "storage" / "shared" / "the_new_civilization" / "config"))
+try:
+    from civilization_config import config
+except ImportError:
+    print("âŒ Configuration not found! Run termux_civilization_setup.sh first.")
+    sys.exit(1)
+
+console = Console()
+
+class TaskType(Enum):
+    """Supported AI task types"""
+    TEXT_GENERATION = "text-generation"
+    TEXT_CLASSIFICATION = "text-classification"
+    SUMMARIZATION = "summarization"
+    TRANSLATION = "translation"
+    QUESTION_ANSWERING = "question-answering"
+    IMAGE_GENERATION = "text-to-image"
+    SPEECH_TO_TEXT = "speech-to-text"
+    TOKEN_CLASSIFICATION = "token-classification"
+    FILL_MASK = "fill-mask"
+
+@dataclass
+class AIRequest:
+    """AI processing request structure"""
+    task_type: TaskType
+    input_data: Any
+    model_name: Optional[str] = None
+    parameters: Optional[Dict] = None
+    priority: int = 1
+    client_id: Optional[str] = None
+
+class CivilizationOrchestrator:
+    """Main orchestration system for The New Civilization"""
+
+    def __init__(self):
+        """Initialize the orchestrator"""
+        self.console = console
+        self.hf_api = HfApi()
+        self.active_pipelines = {}
+        self.request_queue = []
+        self.processing_stats = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "revenue_generated": 0.0
+        }
+
+        # Setup logging
+        self._setup_logging()
+
+        # Authenticate with Hugging Face
+        self._authenticate()
+
+        self.logger.info("ðŸš€ Civilization Orchestrator initialized")
+
+    def _setup_logging(self):
+        """Setup logging system"""
+        log_dir = config.LOGS_DIR
+        log_dir.mkdir(exist_ok=True)
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_dir / "orchestrator.log"),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger("CivilizationOrchestrator")
+
+    def _authenticate(self):
+        """Authenticate with Hugging Face"""
+        if config.HF_TOKEN:
+            try:
+                login(token=config.HF_TOKEN)
+                self.logger.info("âœ… Authenticated with Hugging Face")
+            except Exception as e:
+                self.logger.error(f"âŒ Authentication failed: {e}")
+        else:
+            self.logger.warning("âš ï¸ No HF_TOKEN found - some features may be limited")
+
+    def load_model_pipeline(self, task_type: TaskType, model_name: Optional[str] = None) -> Any:
+        """Load a model pipeline for specific task"""
+        try:
+            # Use default model if none specified
+            if not model_name:
+                model_name = config.DEFAULT_MODELS.get(task_type.value)
+
+            # Check if pipeline already loaded
+            cache_key = f"{task_type.value}_{model_name}"
+            if cache_key in self.active_pipelines:
+                return self.active_pipelines[cache_key]
+
+            self.logger.info(f"ðŸ“¥ Loading {task_type.value} pipeline: {model_name}")
+
+            # Load pipeline
+            pipe = pipeline(task_type.value, model=model_name)
+            self.active_pipelines[cache_key] = pipe
+
+            self.logger.info(f"âœ… Pipeline loaded: {model_name}")
+            return pipe
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to load pipeline {model_name}: {e}")
+            return None
+
+    def process_request(self, request: AIRequest) -> Dict[str, Any]:
+        """Process a single AI request"""
+        try:
+            self.processing_stats["total_requests"] += 1
+
+            self.logger.info(f"ðŸ”„ Processing {request.task_type.value} request")
+
+            # Load appropriate pipeline
+            pipeline_obj = self.load_model_pipeline(request.task_type, request.model_name)
+            if not pipeline_obj:
+                raise Exception("Failed to load pipeline")
+
+            # Process the request
+            start_time = time.time()
+
+            if request.parameters:
+                result = pipeline_obj(request.input_data, **request.parameters)
+            else:
+                result = pipeline_obj(request.input_data)
+
+            processing_time = time.time() - start_time
+
+            # Calculate revenue
+            revenue = self._calculate_revenue(request.task_type, processing_time)
+            self.processing_stats["revenue_generated"] += revenue
+            self.processing_stats["successful_requests"] += 1
+
+            response = {
+                "status": "success",
+                "result": result,
+                "processing_time": processing_time,
+                "revenue": revenue,
+                "model_used": request.model_name or config.DEFAULT_MODELS.get(request.task_type.value),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            self.logger.info(f"âœ… Request processed in {processing_time:.2f}s - Revenue: ${revenue:.4f}")
+            return response
+
+        except Exception as e:
+            self.processing_stats["failed_requests"] += 1
+            self.logger.error(f"âŒ Request failed: {e}")
+
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def _calculate_revenue(self, task_type: TaskType, processing_time: float) -> float:
+        """Calculate revenue based on task type and processing time"""
+        base_rates = {
+            TaskType.TEXT_GENERATION: 0.05,
+            TaskType.TEXT_CLASSIFICATION: 0.01,
+            TaskType.SUMMARIZATION: 0.03,
+            TaskType.TRANSLATION: 0.02,
+            TaskType.IMAGE_GENERATION: 0.10,
+            TaskType.SPEECH_TO_TEXT: 0.04
+        }
+
+        base_rate = base_rates.get(task_type, 0.02)
+        complexity_multiplier = min(processing_time * 0.1, 2.0)  # Max 2x multiplier
+
+        return base_rate * (1 + complexity_multiplier)
+
+    def batch_process(self, requests: List[AIRequest]) -> List[Dict[str, Any]]:
+        """Process multiple requests in batch"""
+        results = []
+
+        with Progress() as progress:
+            task = progress.add_task(f"[cyan]Processing {len(requests)} requests...", total=len(requests))
+
+            for request in requests:
+                result = self.process_request(request)
+                results.append(result)
+                progress.advance(task)
+
+        return results
+
+    def get_available_models(self, task_type: TaskType, limit: int = 10) -> List[str]:
+        """Get available models for specific task type"""
+        try:
+            models = list(self.hf_api.list_models(
+                filter=task_type.value,
+                limit=limit,
+                sort="downloads",
+                direction=-1
+            ))
+
+            return [model.modelId for model in models]
+
+        except Exception as e:
+            self.logger.error(f"âŒ Failed to get models: {e}")
+            return []
+
+    def display_status(self):
+        """Display current system status"""
+        # Create status table
+        table = Table(title="ðŸŒŸ The New Civilization - System Status")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Total Requests", str(self.processing_stats["total_requests"]))
+        table.add_row("Successful", str(self.processing_stats["successful_requests"]))
+        table.add_row("Failed", str(self.processing_stats["failed_requests"]))
+        table.add_row("Revenue Generated", f"${self.processing_stats['revenue_generated']:.4f}")
+        table.add_row("Active Pipelines", str(len(self.active_pipelines)))
+
+        # Success rate
+        total = self.processing_stats["total_requests"]
+        success_rate = (self.processing_stats["successful_requests"] / total * 100) if total > 0 else 0
+        table.add_row("Success Rate", f"{success_rate:.1f}%")
+
+        self.console.print(table)
+
+    def start_interactive_mode(self):
+        """Start interactive mode for testing"""
+        self.console.print(Panel(
+            "ðŸš€ [bold magenta]THE NEW CIVILIZATION[/bold magenta]\n"
+            "Interactive AI Orchestrator\n\n"
+            "Available commands:\n"
+            "â€¢ [cyan]text[/cyan] - Text generation\n"
+            "â€¢ [cyan]classify[/cyan] - Text classification\n"
+            "â€¢ [cyan]summarize[/cyan] - Text summarization\n"
+            "â€¢ [cyan]translate[/cyan] - Text translation\n"
+            "â€¢ [cyan]status[/cyan] - Show system status\n"
+            "â€¢ [cyan]models[/cyan] - List available models\n"
+            "â€¢ [cyan]quit[/cyan] - Exit",
+            title="Interactive Mode",
+            border_style="green"
+        ))
+
+        while True:
+            try:
+                command = self.console.input("\n[bold cyan]Enter command:[/bold cyan] ").strip().lower()
+
+                if command == "quit":
+                    break
+                elif command == "status":
+                    self.display_status()
+                elif command == "models":
+                    self._show_models_menu()
+                elif command == "text":
+                    self._handle_text_generation()
+                elif command == "classify":
+                    self._handle_text_classification()
+                elif command == "summarize":
+                    self._handle_summarization()
+                elif command == "translate":
+                    self._handle_translation()
+                else:
+                    self.console.print("[red]Unknown command. Type 'quit' to exit.[/red]")
+
+            except KeyboardInterrupt:
+                self.console.print("\n[yellow]Interrupted by user[/yellow]")
+                break
+            except Exception as e:
+                self.console.print(f"[red]Error: {e}[/red]")
+
+    def _show_models_menu(self):
+        """Show available models for different tasks"""
+        for task_type in [TaskType.TEXT_GENERATION, TaskType.TEXT_CLASSIFICATION, 
+                         TaskType.SUMMARIZATION, TaskType.TRANSLATION]:
+            models = self.get_available_models(task_type, 5)
+            if models:
+                self.console.print(f"\n[bold]{task_type.value}:[/bold]")
+                for model in models[:3]:
+                    self.console.print(f"  â€¢ {model}")
+
+    def _handle_text_generation(self):
+        """Handle text generation request"""
+        text = self.console.input("Enter prompt: ")
+        if text.strip():
+            request = AIRequest(
+                task_type=TaskType.TEXT_GENERATION,
+                input_data=text,
+                parameters={"max_length": 100, "num_return_sequences": 1}
+            )
+
+            result = self.process_request(request)
+            if result["status"] == "success":
+                self.console.print(f"\n[green]Generated text:[/green] {result['result'][0]['generated_text']}")
+            else:
+                self.console.print(f"[red]Error: {result['error']}[/red]")
+
+    def _handle_text_classification(self):
+        """Handle text classification request"""
+        text = self.console.input("Enter text to classify: ")
+        if text.strip():
+            request = AIRequest(
+                task_type=TaskType.TEXT_CLASSIFICATION,
+                input_data=text
+            )
+
+            result = self.process_request(request)
+            if result["status"] == "success":
+                classification = result["result"][0]
+                self.console.print(f"\n[green]Classification:[/green] {classification['label']} ({classification['score']:.3f})")
+            else:
+                self.console.print(f"[red]Error: {result['error']}[/red]")
+
+    def _handle_summarization(self):
+        """Handle text summarization request"""
+        text = self.console.input("Enter text to summarize: ")
+        if text.strip():
+            request = AIRequest(
+                task_type=TaskType.SUMMARIZATION,
+                input_data=text,
+                parameters={"max_length": 130, "min_length": 30}
+            )
+
+            result = self.process_request(request)
+            if result["status"] == "success":
+                summary = result["result"][0]["summary_text"]
+                self.console.print(f"\n[green]Summary:[/green] {summary}")
+            else:
+                self.console.print(f"[red]Error: {result['error']}[/red]")
+
+    def _handle_translation(self):
+        """Handle translation request"""
+        text = self.console.input("Enter text to translate (EN->ID): ")
+        if text.strip():
+            request = AIRequest(
+                task_type=TaskType.TRANSLATION,
+                input_data=text
+            )
+
+            result = self.process_request(request)
+            if result["status"] == "success":
+                translation = result["result"][0]["translation_text"]
+                self.console.print(f"\n[green]Translation:[/green] {translation}")
+            else:
+                self.console.print(f"[red]Error: {result['error']}[/red]")
+
+def main():
+    """Main entry point"""
+    orchestrator = CivilizationOrchestrator()
+
+    # Show welcome message
+    console.print(Panel(
+        "ðŸŒŸ [bold magenta]THE NEW CIVILIZATION[/bold magenta] ðŸŒŸ\n\n"
+        "ðŸš€ Hugging Face Orchestrator Online\n"
+        "ðŸ¤– 100,000+ Models Available\n"
+        "ðŸ’° Revenue Generation Active\n"
+        "ðŸ“± Mobile-Optimized Performance",
+        title="System Initialized",
+        border_style="green"
+    ))
+
+    # Start interactive mode
+    orchestrator.start_interactive_mode()
+
+    # Show final stats
+    console.print("\n[yellow]Session Summary:[/yellow]")
+    orchestrator.display_status()
+
+    console.print("\n[green]Thank you for using The New Civilization! ðŸš€[/green]")
+
+if __name__ == "__main__":
+    main()

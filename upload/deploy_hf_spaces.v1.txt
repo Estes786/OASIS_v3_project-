@@ -1,0 +1,172 @@
+"#!/bin/bash
+# OASIS v3 - HuggingFace Spaces Deployment Script
+# Automated deployment preparation and validation
+
+echo "ðŸš€ OASIS v3 - HuggingFace Spaces Deployment"
+echo "============================================="
+
+# Configuration
+HF_USERNAME="your-username"
+SPACE_NAME="oasis-v3"
+HF_TOKEN="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"
+
+# Check if huggingface_hub is installed
+echo "ðŸ” Checking dependencies..."
+python -c "import huggingface_hub" 2>/dev/null || {
+    echo "ðŸ“¦ Installing huggingface_hub..."
+    pip install huggingface_hub
+}
+
+# Create deployment directory
+echo "ðŸ“ Creating deployment directory..."
+mkdir -p hf_spaces_deploy
+cd hf_spaces_deploy
+
+# Copy application files
+echo "ðŸ“‹ Preparing application files..."
+cp ../hf_spaces_app.py app.py
+cp ../requirements_hf_spaces.txt requirements.txt
+
+# Create README for HF Spaces
+cat > README.md << 'EOF'
+---
+title: OASIS v3 - AI Orchestration Platform
+emoji: ðŸš€
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: 4.8.0
+app_file: app.py
+pinned: false
+license: mit
+---
+
+# OASIS v3 - AI Orchestration Platform
+
+Ultra-lightweight AI orchestration with multiple model capabilities.
+Revenue-ready architecture targeting $50K+/month.
+
+## Features
+
+- ðŸŽ¯ **Sentiment Analysis** - Advanced emotion detection
+- ðŸ¤– **Text Generation** - Conversational AI capabilities  
+- ðŸ“ **Summarization** - Intelligent content compression
+- ðŸŒ **Translation** - Multi-language support
+- ðŸ“Š **Analytics** - Real-time business metrics
+- ðŸ’° **Revenue Tracking** - Built-in monetization
+
+## API Usage
+
+```python
+import requests
+
+# Sentiment analysis
+response = requests.post(
+    "https://your-username-oasis-v3.hf.space/api/process",
+    json={
+        "task_type": "sentiment", 
+        "text": "I love this application!"
+    }
+)
+```
+
+## Mobile Integration
+
+Compatible with ultra-lightweight Termux orchestrator:
+- Zero external dependencies
+- <5MB footprint
+- <500ms response times
+
+## Business Model
+
+- Pay-per-use API calls
+- Enterprise orchestration
+- Mobile-first architecture
+- Scalable revenue streams
+
+Built for $50K+/month revenue targets with enterprise-grade reliability.
+EOF
+
+# Create .gitignore
+cat > .gitignore << 'EOF'
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+*.log
+.DS_Store
+EOF
+
+# Validate files
+echo "âœ… Validating deployment files..."
+
+# Check app.py
+if [[ -f "app.py" ]]; then
+    echo "  âœ… app.py - Ready"
+else
+    echo "  âŒ app.py - Missing"
+    exit 1
+fi
+
+# Check requirements.txt
+if [[ -f "requirements.txt" ]]; then
+    echo "  âœ… requirements.txt - Ready"
+else
+    echo "  âŒ requirements.txt - Missing"
+    exit 1
+fi
+
+# Check README.md
+if [[ -f "README.md" ]]; then
+    echo "  âœ… README.md - Ready"
+else
+    echo "  âŒ README.md - Missing"
+    exit 1
+fi
+
+echo ""
+echo "ðŸ“‹ Deployment Files Summary:"
+echo "=============================="
+echo "ðŸ“„ app.py          - Main Gradio application"
+echo "ðŸ“¦ requirements.txt - Python dependencies"  
+echo "ðŸ“– README.md        - HF Spaces configuration"
+echo "ðŸš« .gitignore       - Git ignore rules"
+
+echo ""
+echo "ðŸš€ Next Steps:"
+echo "=============="
+echo "1. Create HuggingFace Space:"
+echo "   - Visit https://huggingface.co/spaces"
+echo "   - Click 'Create new Space'"
+echo "   - Name: ${SPACE_NAME}"
+echo "   - SDK: Gradio"
+echo "   - Hardware: CPU Basic (free)"
+echo ""
+echo "2. Upload files to your Space:"
+echo "   - Drag & drop all files from hf_spaces_deploy/"
+echo "   - Or use git commands:"
+echo "   git clone https://huggingface.co/spaces/${HF_USERNAME}/${SPACE_NAME}"
+echo "   cp hf_spaces_deploy/* ${HF_USERNAME}-${SPACE_NAME}/"
+echo "   cd ${HF_USERNAME}-${SPACE_NAME}"
+echo "   git add ."
+echo "   git commit -m 'Initial OASIS v3 deployment'"
+echo "   git push"
+echo ""
+echo "3. Update Termux config:"
+echo "   - Copy your Space URL"
+echo "   - Update oasis_config.json base_url"
+echo "   - Test with 'python oasis_orchestrator.py test'"
+echo ""
+echo "ðŸŽ¯ Target Space URL:"
+echo "https://${HF_USERNAME}-${SPACE_NAME}.hf.space"
+echo ""
+echo "ðŸ’¡ Pro Tips:"
+echo "- Enable public access for API calls"
+echo "- Monitor usage in HF Spaces dashboard"  
+echo "- Scale to better hardware for production"
+echo "- Set up custom domain for branding""

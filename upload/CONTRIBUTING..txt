@@ -1,0 +1,170 @@
+"# Contributing to The New Civilization
+
+Thank you for your interest in contributing to The New Civilization! This project aims to democratize AI access through ultra-lightweight, mobile-first architecture.
+
+## ðŸŒŸ **Project Philosophy**
+
+- **Ultra-Lightweight**: <5MB footprint, zero heavy dependencies
+- **API-First**: All AI processing via Hugging Face cloud
+- **Mobile-Optimized**: Perfect for Termux and Android
+- **Revenue-Ready**: Built-in monetization features
+- **Open Source**: MIT License, community-driven
+
+## ðŸš€ **Getting Started**
+
+### Prerequisites
+- Python 3.8+
+- Git
+- Hugging Face account and API token
+
+### Development Setup
+```bash
+# Fork and clone the repository
+git clone https://github.com/your-username/the-new-civilization.git
+cd the-new-civilization
+
+# Install dependencies (ultra-minimal)
+pip install -r requirements.txt
+
+# Set environment variables
+export HF_TOKEN="your_hugging_face_token"
+
+# Run in development mode
+python app.py
+```
+
+## ðŸ“‹ **How to Contribute**
+
+### 1. **Bug Reports**
+- Use GitHub Issues with the "bug" label
+- Include steps to reproduce
+- Specify environment details (OS, Python version, etc.)
+
+### 2. **Feature Requests**
+- Use GitHub Issues with the "enhancement" label
+- Describe the use case and expected behavior
+- Consider the ultra-lightweight philosophy
+
+### 3. **Code Contributions**
+- Fork the repository
+- Create a feature branch: `git checkout -b feature/amazing-feature`
+- Make your changes following our guidelines
+- Add tests if applicable
+- Commit with clear messages
+- Push to your fork
+- Create a Pull Request
+
+## ðŸ“ **Development Guidelines**
+
+### Code Style
+- Follow PEP 8 for Python code
+- Use type hints where appropriate
+- Keep functions small and focused
+- Write clear, descriptive variable names
+
+### Architecture Principles
+- **NO HEAVY DEPENDENCIES**: Avoid numpy, pandas, torch, transformers
+- **API-First**: Use Hugging Face APIs instead of local models
+- **Ultra-Lightweight**: Keep total footprint under 5MB
+- **Mobile-Friendly**: Ensure compatibility with Termux
+
+### Testing
+```bash
+# Run tests
+python -m pytest tests/
+
+# Check code quality
+black .
+flake8 .
+```
+
+## ðŸ—ï¸ **Project Structure**
+
+```
+the-new-civilization/
+â”œâ”€â”€ app.py                    # Main application
+â”œâ”€â”€ requirements.txt          # Ultra-lightweight dependencies
+â”œâ”€â”€ src/                      # Core modules
+â”‚   â”œâ”€â”€ hf_controller.py      # Hugging Face API client
+â”‚   â”œâ”€â”€ business_engine.py    # Revenue tracking
+â”‚   â””â”€â”€ api_gateway.py        # API management
+â”œâ”€â”€ scripts/                  # Setup and deployment
+â”œâ”€â”€ deployment/               # Multi-platform deployment
+â”œâ”€â”€ examples/                 # Usage examples
+â””â”€â”€ docs/                     # Documentation
+```
+
+## ðŸ”„ **Pull Request Process**
+
+1. **Before Starting**
+   - Check existing issues and PRs
+   - Discuss major changes in an issue first
+
+2. **PR Requirements**
+   - Clear description of changes
+   - Link to related issues
+   - Tests pass (if applicable)
+   - Follows coding standards
+   - Maintains ultra-lightweight philosophy
+
+3. **Review Process**
+   - Maintainers will review within 48 hours
+   - Address feedback promptly
+   - Squash commits before merging
+
+## ðŸ› **Reporting Issues**
+
+### Bug Report Template
+```
+**Describe the bug**
+A clear description of what the bug is.
+
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '....'
+3. See error
+
+**Expected behavior**
+What you expected to happen.
+
+**Environment:**
+- OS: [e.g. Android/Termux, Ubuntu]
+- Python version: [e.g. 3.9]
+- Project version: [e.g. 2.0.0]
+
+**Additional context**
+Any other context about the problem.
+```
+
+## ðŸ’¡ **Feature Request Guidelines**
+
+- **Keep It Lightweight**: Ensure requests align with our <5MB philosophy
+- **API-First**: Prefer cloud-based solutions over local processing
+- **Mobile-Friendly**: Consider Termux and mobile users
+- **Business Value**: Consider revenue generation potential
+
+## ðŸ† **Recognition**
+
+Contributors will be:
+- Listed in our README contributors section
+- Mentioned in release notes
+- Given credit in documentation
+
+## ðŸ“ž **Getting Help**
+
+- **Discord**: [Join our community](https://discord.gg/the-new-civilization)
+- **GitHub Issues**: For bug reports and feature requests
+- **Email**: support@thenewcivilization.org
+
+## ðŸ”’ **Security**
+
+If you discover a security vulnerability, please email security@thenewcivilization.org instead of using the issue tracker.
+
+## ðŸ“„ **License**
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+Thank you for helping make AI accessible to everyone! ðŸŒŸ"
