@@ -263,3 +263,52 @@ ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || 
 pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
 source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="hf_YOUR_TOKEN_HERE"
 source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-JLkNpaGdqVtbKUwnpgWXPb"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd /home/ubuntu && git init
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && git rm --cached .nvm
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -rf agi_infinity_loop
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -rf new_civilization_backend
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -rf new_civilization_frontend
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -rf oasis_backend
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -rf oasis_frontend
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && git rm --cached .nvm
+source /home/ubuntu/.user_env && cd /home/ubuntu && git rm --cached -f .nvm
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-JLkNpaGdqVtbKUwnpgWXPb"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+source /home/ubuntu/.user_env && cd /home/ubuntu && rm -f .git/index.lock
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+source /home/ubuntu/.user_env && cd /home/ubuntu && git config --global user.email "agent@example.com"
+source /home/ubuntu/.user_env && cd /home/ubuntu && git config --global user.name "AI Agent"
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+source /home/ubuntu/.user_env && cd /home/ubuntu && git add .
+source /home/ubuntu/.user_env && cd /home/ubuntu && git commit -m "Initial commit of OASIS v3 project files"
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-JLkNpaGdqVtbKUwnpgWXPb"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="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"
+source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
+source /home/ubuntu/.user_env && cd /home/ubuntu && export HF_TOKEN="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"
+source /home/ubuntu/.user_env && cd /home/ubuntu && python3 termux_hf_orchestrator.py
